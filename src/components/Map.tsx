@@ -1,10 +1,23 @@
-import { MapContainer, Marker, TileLayer, useMap } from "react-leaflet";
-import { MaptilerLayer } from "@maptiler/leaflet-maptilersdk";
+import {
+  MapContainer,
+  Marker,
+  TileLayer,
+  useMap,
+  useMapEvents,
+} from "react-leaflet";
+import { MaptilerLayer, MapStyle } from "@maptiler/leaflet-maptilersdk";
 import "leaflet/dist/leaflet.css";
 import type { Coords } from "../types";
 import { useEffect } from "react";
 
 const API_KEY = import.meta.env.VITE_API_KEY;
+
+// MapTiler basemap — dark style that matches the app's atmospheric, Windy-like
+// inspiration. The MaptilerLayer accepts a `MapStyleVariant` object from the
+// SDK's `MapStyle` enum; raw strings like "streets-v2-dark" are not recognized
+// and the SDK falls back to the deprecated "Streets Default v2".
+const MAPTILER_STYLE = MapStyle.STREETS.DARK;
+const MAPTILER_API_KEY = "QRLg65UXd2y9kR0eA8d8";
 
 type Props = {
   coords: Coords;
@@ -24,9 +37,10 @@ export default function Map({ coords, onMapClick, mapType }: Props) {
         height: "500px",
       }}
     >
-      <MapClick onMapClick={onMapClick} coords={coords} />
+      <MapController onMapClick={onMapClick} coords={coords} />
       <MapTileLayer />
       <TileLayer
+        key={mapType}
         opacity={0.7}
         url={`https://tile.openweathermap.org/map/${mapType}/{z}/{x}/{y}.png?appid=${API_KEY}`}
       />
@@ -35,7 +49,18 @@ export default function Map({ coords, onMapClick, mapType }: Props) {
   );
 }
 
-const MapClick = ({
+/**
+ * Pans the map when coords change and registers a single click handler that
+ * forwards lat/lng up. Replaces the previous render-side `map.on('click', ...)`
+ * call which leaked a new listener on every render.
+ *
+ * `panTo` must wait for the map's panes to be ready, otherwise it crashes with
+ * "Cannot read properties of undefined (reading '_leaflet_pos')" — particularly
+ * under React StrictMode where the map double-mounts in dev. `whenReady`
+ * resolves immediately if the map is already initialized, so it's safe to use
+ * for both the first-paint pan and subsequent coord changes.
+ */
+const MapController = ({
   onMapClick,
   coords,
 }: {
@@ -43,11 +68,29 @@ const MapClick = ({
   coords: Coords;
 }) => {
   const map = useMap();
-  map.panTo([coords.lat, coords.lon]);
 
-  map.on("click", (e) => {
-    const { lat, lng } = e.latlng;
-    onMapClick(lat, lng);
+  useEffect(() => {
+    let cancelled = false;
+    map.whenReady(() => {
+      if (cancelled) return;
+      try {
+        // Jump directly to the new location so Leaflet doesn't fetch every
+        // intermediate tile across long distances (e.g. EU → US).
+        map.setView([coords.lat, coords.lon], map.getZoom(), { animate: false });
+      } catch {
+        // The map was torn down between whenReady and now (StrictMode
+        // double-effect). Safe to ignore — the next mount will pan correctly.
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [coords.lat, coords.lon, map]);
+
+  useMapEvents({
+    click: (e) => {
+      onMapClick(e.latlng.lat, e.latlng.lng);
+    },
   });
 
   return null;
@@ -58,13 +101,17 @@ function MapTileLayer() {
 
   useEffect(() => {
     const tileLayer = new MaptilerLayer({
-      style: "hybrid-v4-dark",
-      apiKey: "QRLg65UXd2y9kR0eA8d8",
+      style: MAPTILER_STYLE,
+      apiKey: MAPTILER_API_KEY,
     });
     tileLayer.addTo(map);
 
     return () => {
-      map.removeLayer(tileLayer);
+      try {
+        map.removeLayer(tileLayer);
+      } catch {
+        // Map already torn down (StrictMode double-effect / unmount race).
+      }
     };
   }, [map]);
 

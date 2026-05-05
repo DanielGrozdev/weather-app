@@ -1,4 +1,4 @@
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import Card from "./Card";
 import { getWeather } from "../../api";
 
@@ -10,24 +10,41 @@ import Sunrise from "/src/assets/sunrise.svg?react";
 import Sunset from "/src/assets/sunset.svg?react";
 import UpArrow from "/src/assets/uparrow.svg?react";
 import type { Coords } from "../../types";
+import { useUnits } from "../../hooks/useUnits";
 
 type Props = {
   coords: Coords;
 };
 
 export default function AdditionalInfo({ coords }: Props) {
-  const { data } = useSuspenseQuery({
-    queryKey: ["weather", coords],
+  const { units } = useUnits();
+  const { data, isFetching } = useQuery({
+    queryKey: ["weather", coords.lat, coords.lon, units],
     queryFn: () =>
       getWeather({
         lat: coords.lat,
         lon: coords.lon,
+        units,
       }),
+    placeholderData: keepPreviousData,
   });
+
+  if (!data) {
+    return (
+      <Card
+        title="Additional Weather Info"
+        childrenClassName="flex flex-col gap-8"
+      >
+        <div className="h-56 rounded-lg bg-muted/30 animate-pulse" />
+      </Card>
+    );
+  }
+
   return (
     <Card
       title="Additional Weather Info"
       childrenClassName="flex flex-col gap-8"
+      isRefreshing={isFetching}
     >
       {rows.map(({ label, value, Icon }) => (
         <div key={value} className="flex justify-between">

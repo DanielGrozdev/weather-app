@@ -1,25 +1,42 @@
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import Card from "./Card";
 import { getWeather } from "../../api";
 import WeatherIcon from "../WeatherIcon";
 import type { Coords } from "../../types";
+import { useUnits } from "../../hooks/useUnits";
+import { formatTemp } from "../../lib/format";
 
 type Props = {
   coords: Coords;
 };
 
 export default function DailyForecast({ coords }: Props) {
-  const { data } = useSuspenseQuery({
-    queryKey: ["weather", coords],
+  const { units } = useUnits();
+  const { data, isFetching } = useQuery({
+    queryKey: ["weather", coords.lat, coords.lon, units],
     queryFn: () =>
       getWeather({
         lat: coords.lat,
         lon: coords.lon,
+        units,
       }),
+    placeholderData: keepPreviousData,
   });
 
+  if (!data) {
+    return (
+      <Card title="Daily Forecast" childrenClassName="flex flex-col gap-4">
+        <div className="h-56 rounded-lg bg-muted/30 animate-pulse" />
+      </Card>
+    );
+  }
+
   return (
-    <Card title="Daily Forecast" childrenClassName="flex flex-col gap-4">
+    <Card
+      title="Daily Forecast"
+      childrenClassName="flex flex-col gap-4"
+      isRefreshing={isFetching}
+    >
       {data?.daily.map((day) => (
         <div key={day.dt} className="flex justify-between">
           <p className="w-9">
@@ -28,9 +45,9 @@ export default function DailyForecast({ coords }: Props) {
             })}
           </p>
           <WeatherIcon src={day.weather[0].icon} />
-          <p>{Math.round(day.temp.day)}°F</p>
-          <p className="text-gray-500/75">{Math.round(day.temp.min)}°F</p>
-          <p className="text-gray-500/75">{Math.round(day.temp.max)}°F</p>
+          <p>{formatTemp(day.temp.day, units)}</p>
+          <p className="text-gray-500/75">{formatTemp(day.temp.min, units)}</p>
+          <p className="text-gray-500/75">{formatTemp(day.temp.max, units)}</p>
         </div>
       ))}
     </Card>
