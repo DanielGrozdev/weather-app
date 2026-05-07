@@ -70,10 +70,7 @@ export default function CitySearch({
   useEffect(() => {
     if (!isActive) return;
     function onMouseDown(e: MouseEvent) {
-      if (
-        rootRef.current &&
-        !rootRef.current.contains(e.target as Node)
-      ) {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
         setActive(false);
         setQuery("");
       }
@@ -144,7 +141,7 @@ export default function CitySearch({
       <div
         className={[
           "group flex items-center gap-2 h-10 px-3 rounded-full",
-          "bg-card/80 backdrop-blur-md border border-border",
+          "bg-card/50 backdrop-blur-md border border-border",
           "transition-all duration-200",
           isActive
             ? "border-ring ring-3 ring-ring/30 bg-card"
@@ -266,9 +263,15 @@ export default function CitySearch({
                 const id = `${listboxId}-${cityKey(city)}`;
                 const isActiveItem = idx === activeIndex;
                 const isSelected =
-                  selectedCity != null && cityKey(selectedCity) === cityKey(city);
+                  selectedCity != null &&
+                  cityKey(selectedCity) === cityKey(city);
                 return (
-                  <li key={cityKey(city)} role="option" id={id} aria-selected={isActiveItem}>
+                  <li
+                    key={cityKey(city)}
+                    role="option"
+                    id={id}
+                    aria-selected={isActiveItem}
+                  >
                     <button
                       type="button"
                       // Don't blur the input when clicking an item.
@@ -278,9 +281,7 @@ export default function CitySearch({
                       className={[
                         "w-full flex items-center gap-3 px-3 py-2 text-left",
                         "transition-colors",
-                        isActiveItem
-                          ? "bg-muted/60"
-                          : "hover:bg-muted/40",
+                        isActiveItem ? "bg-muted/60" : "hover:bg-muted/40",
                       ].join(" ")}
                     >
                       <MapPin
@@ -294,7 +295,9 @@ export default function CitySearch({
                           <HighlightMatch text={city.name} query={query} />
                         </span>
                         <span className="text-xs text-muted-foreground/70 truncate">
-                          {[city.state, city.country].filter(Boolean).join(", ")}
+                          {[city.state, city.country]
+                            .filter(Boolean)
+                            .join(", ")}
                         </span>
                       </div>
                     </button>

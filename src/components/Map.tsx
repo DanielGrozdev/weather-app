@@ -16,7 +16,7 @@ const API_KEY = import.meta.env.VITE_API_KEY;
 // inspiration. The MaptilerLayer accepts a `MapStyleVariant` object from the
 // SDK's `MapStyle` enum; raw strings like "streets-v2-dark" are not recognized
 // and the SDK falls back to the deprecated "Streets Default v2".
-const MAPTILER_STYLE = MapStyle.STREETS.DARK;
+const MAPTILER_STYLE = MapStyle.STREETS.NIGHT;
 const MAPTILER_API_KEY = "QRLg65UXd2y9kR0eA8d8";
 
 type Props = {
@@ -31,10 +31,10 @@ export default function Map({ coords, onMapClick, mapType }: Props) {
   return (
     <MapContainer
       center={[lat, lon]}
-      zoom={10}
+      zoom={6}
       style={{
         width: "100%",
-        height: "500px",
+        height: "100vh",
       }}
     >
       <MapController onMapClick={onMapClick} coords={coords} />
@@ -43,6 +43,7 @@ export default function Map({ coords, onMapClick, mapType }: Props) {
         key={mapType}
         opacity={0.7}
         url={`https://tile.openweathermap.org/map/${mapType}/{z}/{x}/{y}.png?appid=${API_KEY}`}
+        tileSize={256}
       />
       <Marker position={[lat, lon]} />
     </MapContainer>
@@ -76,7 +77,9 @@ const MapController = ({
       try {
         // Jump directly to the new location so Leaflet doesn't fetch every
         // intermediate tile across long distances (e.g. EU → US).
-        map.setView([coords.lat, coords.lon], map.getZoom(), { animate: false });
+        map.setView([coords.lat, coords.lon], map.getZoom(), {
+          animate: false,
+        });
       } catch {
         // The map was torn down between whenReady and now (StrictMode
         // double-effect). Safe to ignore — the next mount will pan correctly.
