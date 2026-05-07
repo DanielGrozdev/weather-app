@@ -20,7 +20,7 @@ export default function Legend({ config }: Props) {
         zIndex: 1000,
       }}
     >
-      <div className="rounded-lg bg-black/80 p-3 text-white shadow-lg">
+      <div className="rounded-lg bg-black/70 backdrop-blur-md shadow-2xl p-3 text-white">
         <div className="mb-2 flex items-center justify-between text-sm">
           <span className="whitespace-nowrap">{config.label}</span>
         </div>
@@ -28,7 +28,7 @@ export default function Legend({ config }: Props) {
           <span className="shrink-0 text-xs">{config.min}</span>
 
           <div
-            className="h-3 w-full rounded opacity-70"
+            className="h-3 w-full rounded"
             style={{ background: config.gradient }}
           />
           <span className="shrink-0 text-xs">{config.max}</span>

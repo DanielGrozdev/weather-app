@@ -7,7 +7,7 @@ const DEFAULT_CITY: CityResult = {
   lat: 43.2,
   lon: 27.9,
 };
-const DEFAULT_MAP_TYPE = "clouds_new";
+const DEFAULT_MAP_TYPE = "temp_new";
 
 /**
  * Centralizes the top-level state for the weather app:
@@ -27,6 +27,10 @@ export function useWeatherApp() {
   const [customCoords, setCustomCoords] = useState<Coords | null>(null);
   const [mapType, setMapType] = useState(DEFAULT_MAP_TYPE);
   const [cardsVisible, setCardsVisible] = useState(true);
+  const [windParticlesEnabled, setWindParticlesEnabled] = useState(true);
+  const [overlaysVisible, setOverlaysVisible] = useState(true);
+  // Placeholder for time-aware layers (e.g. tiles that support `time=` param).
+  const [timeOffsetMinutes, setTimeOffsetMinutes] = useState(0);
 
   const selectCity = useCallback((city: CityResult) => {
     setSelectedCity(city);
@@ -39,6 +43,11 @@ export function useWeatherApp() {
   }, []);
 
   const toggleCards = useCallback(() => setCardsVisible((v) => !v), []);
+  const toggleWindParticles = useCallback(
+    () => setWindParticlesEnabled((v) => !v),
+    [],
+  );
+  const toggleOverlays = useCallback(() => setOverlaysVisible((v) => !v), []);
 
   const coords: Coords =
     customCoords ??
@@ -56,5 +65,13 @@ export function useWeatherApp() {
     onMapClick,
     cardsVisible,
     toggleCards,
+    windParticlesEnabled,
+    setWindParticlesEnabled,
+    toggleWindParticles,
+    overlaysVisible,
+    setOverlaysVisible,
+    toggleOverlays,
+    timeOffsetMinutes,
+    setTimeOffsetMinutes,
   };
 }

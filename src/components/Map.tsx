@@ -23,9 +23,15 @@ type Props = {
   coords: Coords;
   onMapClick: (lat: number, lon: number) => void;
   mapType: string;
+  windParticlesEnabled?: boolean;
 };
 
-export default function Map({ coords, onMapClick, mapType }: Props) {
+export default function Map({
+  coords,
+  onMapClick,
+  mapType,
+  windParticlesEnabled,
+}: Props) {
   const { lat, lon } = coords;
 
   return (
@@ -36,12 +42,13 @@ export default function Map({ coords, onMapClick, mapType }: Props) {
         width: "100%",
         height: "100vh",
       }}
+      data-wind-particles={windParticlesEnabled ? "on" : "off"}
     >
       <MapController onMapClick={onMapClick} coords={coords} />
       <MapTileLayer />
       <TileLayer
         key={mapType}
-        opacity={0.7}
+        opacity={1}
         url={`https://tile.openweathermap.org/map/${mapType}/{z}/{x}/{y}.png?appid=${API_KEY}`}
         tileSize={256}
       />
