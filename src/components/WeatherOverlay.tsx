@@ -68,8 +68,13 @@ export default function WeatherOverlay({ coords, selectedCity }: Props) {
         ) : (
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="text-4xl font-semibold tracking-tight">
-                {formatTemp(data.current.temp, units)}
+              <div className="tracking-tight">
+                <div className="flex flex-col text-4xl font-semibold">
+                  <span>{formatTemp(data.current.temp, units)}</span>
+                  <span className="text-sm font-light">
+                    Feels like {formatTemp(data.current.feels_like, units)}
+                  </span>
+                </div>
               </div>
               <WeatherIcon
                 src={data.current.weather[0].icon}

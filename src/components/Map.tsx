@@ -9,6 +9,7 @@ import { MaptilerLayer, MapStyle } from "@maptiler/leaflet-maptilersdk";
 import "leaflet/dist/leaflet.css";
 import type { Coords } from "../types";
 import { useEffect } from "react";
+// import { WindParticlesLayer } from "./WindParticles";
 
 const API_KEY = import.meta.env.VITE_API_KEY;
 
@@ -45,6 +46,7 @@ export default function Map({
       data-wind-particles={windParticlesEnabled ? "on" : "off"}
     >
       <MapController onMapClick={onMapClick} coords={coords} />
+      {/* <WindParticlesLayer enabled={windParticlesEnabled} /> */}
       <MapTileLayer />
       <TileLayer
         key={mapType}
