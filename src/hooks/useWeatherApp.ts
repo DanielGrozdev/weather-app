@@ -27,7 +27,7 @@ export function useWeatherApp() {
   const [customCoords, setCustomCoords] = useState<Coords | null>(null);
   const [mapType, setMapType] = useState(DEFAULT_MAP_TYPE);
   const [cardsVisible, setCardsVisible] = useState(true);
-  const [windParticlesEnabled, setWindParticlesEnabled] = useState(true);
+  const [windParticlesEnabled, setWindParticlesEnabled] = useState(false);
   const [overlaysVisible, setOverlaysVisible] = useState(true);
   // Placeholder for time-aware layers (e.g. tiles that support `time=` param).
   const [timeOffsetMinutes, setTimeOffsetMinutes] = useState(0);

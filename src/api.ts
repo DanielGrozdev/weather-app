@@ -62,3 +62,33 @@ export async function searchCities(
   }
   return out;
 }
+
+/**
+ * Reverse-geocode a (lat, lon) pair to the nearest named place.
+ * Returns null if the request fails or no result is found.
+ */
+export async function reverseGeocode(
+  lat: number,
+  lon: number,
+): Promise<CityResult | null> {
+  const url = new URL("https://api.openweathermap.org/geo/1.0/reverse");
+  url.searchParams.set("lat", String(lat));
+  url.searchParams.set("lon", String(lon));
+  url.searchParams.set("limit", "1");
+  url.searchParams.set("appid", API_KEY);
+
+  const res = await fetch(url.toString());
+  if (!res.ok) return null;
+
+  const raw = GeocodeSchema.parse(await res.json());
+  if (raw.length === 0) return null;
+
+  const item = raw[0];
+  return {
+    name: item.name,
+    country: item.country,
+    state: item.state,
+    lat: item.lat,
+    lon: item.lon,
+  };
+}

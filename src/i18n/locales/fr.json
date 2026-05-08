@@ -1,0 +1,52 @@
+{
+  "search": {
+    "placeholder": "Rechercher des villes…",
+    "clearSearch": "Effacer la recherche",
+    "recent": "Récent",
+    "clear": "Effacer",
+    "error": "Impossible de charger les suggestions. Réessayez.",
+    "noResults": "Aucune ville ne correspond à « {{query}} »"
+  },
+  "overlay": {
+    "locating": "Localisation…",
+    "droppedPin": "Épingle posée",
+    "refreshing": "Actualisation",
+    "feelsLike": "Ressenti",
+    "windSpeed": "Vitesse du vent",
+    "windDirection": "Direction du vent",
+    "humidity": "Humidité",
+    "clouds": "Nuages",
+    "pressure": "Pression",
+    "collapseDetails": "Réduire les détails",
+    "expandDetails": "Afficher les détails"
+  },
+  "layers": {
+    "temperature": "Température",
+    "pressure": "Pression",
+    "windSpeed": "Vitesse du vent",
+    "precipitation": "Précipitations",
+    "clouds": "Nuages",
+    "windParticles": "Particules de vent"
+  },
+  "timeScrubber": {
+    "label": "Curseur temporel",
+    "stepBack": "Reculer",
+    "stepForward": "Avancer"
+  },
+  "controls": {
+    "hideOverlays": "Masquer les couches",
+    "showOverlays": "Afficher les couches",
+    "switchToFahrenheit": "Passer en Fahrenheit",
+    "switchToCelsius": "Passer en Celsius"
+  },
+  "tooltip": {
+    "temperature": "Température",
+    "windSpeed": "Vitesse du vent",
+    "pressure": "Pression"
+  },
+  "language": {
+    "en": "EN",
+    "bg": "BG",
+    "fr": "FR"
+  }
+}

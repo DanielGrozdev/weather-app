@@ -13,6 +13,7 @@ import { cityKey, type CityResult } from "../../types";
 import { useCitySearch } from "../../hooks/useCitySearch";
 import { useRecentCities } from "../../hooks/useRecentCities";
 import { HighlightMatch } from "./HighlightMatch";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   selectedCity: CityResult | null;
@@ -41,6 +42,7 @@ export default function CitySearch({
   // don't need an effect to keep it in sync.
   const [activeIndexRaw, setActiveIndex] = useState(-1);
 
+  const { t } = useTranslation();
   const { data, isFetching, isError, isSearching, isMinLength } =
     useCitySearch(query);
   const { recents, add: rememberCity, clear: clearRecents } = useRecentCities();
@@ -166,7 +168,7 @@ export default function CitySearch({
               ? `${listboxId}-${cityKey(items[activeIndex])}`
               : undefined
           }
-          placeholder="Search cities…"
+          placeholder={t("search.placeholder")}
           value={inputValue}
           onChange={(e) => {
             setActive(true);
@@ -186,7 +188,7 @@ export default function CitySearch({
         ) : isActive && query.length > 0 ? (
           <button
             type="button"
-            aria-label="Clear search"
+            aria-label={t("search.clearSearch")}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => {
               setQuery("");
@@ -216,7 +218,7 @@ export default function CitySearch({
             <div className="flex items-center justify-between px-3 pt-3 pb-1">
               <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground inline-flex items-center gap-1.5">
                 <Clock className="size-3" />
-                Recent
+                {t("search.recent")}
               </span>
               <button
                 type="button"
@@ -227,7 +229,7 @@ export default function CitySearch({
                 }}
                 className="text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
-                Clear
+                {t("search.clear")}
               </button>
             </div>
           )}
@@ -246,14 +248,13 @@ export default function CitySearch({
 
           {isError && (
             <div className="px-3 py-4 text-sm text-destructive text-center">
-              Couldn't load suggestions. Try again.
+              {t("search.error")}
             </div>
           )}
 
           {showEmptyState && (
             <div className="px-3 py-4 text-sm text-muted-foreground text-center">
-              No cities match{" "}
-              <span className="text-foreground">"{query.trim()}"</span>
+              {t("search.noResults", { query: query.trim() })}
             </div>
           )}
 

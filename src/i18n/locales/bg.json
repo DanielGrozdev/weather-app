@@ -1,0 +1,52 @@
+{
+  "search": {
+    "placeholder": "Търси градове…",
+    "clearSearch": "Изчисти търсенето",
+    "recent": "Скорошни",
+    "clear": "Изчисти",
+    "error": "Неуспешно зареждане. Опитай отново.",
+    "noResults": "Няма градове, съответстващи на „{{query}}"
+  },
+  "overlay": {
+    "locating": "Локализиране…",
+    "droppedPin": "Пусната игла",
+    "refreshing": "Обновяване",
+    "feelsLike": "Усеща се като",
+    "windSpeed": "Скорост на вятъра",
+    "windDirection": "Посока на вятъра",
+    "humidity": "Влажност",
+    "clouds": "Облачност",
+    "pressure": "Налягане",
+    "collapseDetails": "Скрий детайли",
+    "expandDetails": "Покажи детайли"
+  },
+  "layers": {
+    "temperature": "Температура",
+    "pressure": "Налягане",
+    "windSpeed": "Скорост на вятъра",
+    "precipitation": "Валежи",
+    "clouds": "Облачност",
+    "windParticles": "Частици вятър"
+  },
+  "timeScrubber": {
+    "label": "Времева лента",
+    "stepBack": "Стъпка назад",
+    "stepForward": "Стъпка напред"
+  },
+  "controls": {
+    "hideOverlays": "Скрий слоевете",
+    "showOverlays": "Покажи слоевете",
+    "switchToFahrenheit": "Превключи към Фаренхайт",
+    "switchToCelsius": "Превключи към Целзий"
+  },
+  "tooltip": {
+    "temperature": "Температура",
+    "windSpeed": "Скорост на вятъра",
+    "pressure": "Налягане"
+  },
+  "language": {
+    "en": "EN",
+    "bg": "BG",
+    "fr": "FR"
+  }
+}

@@ -1,5 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 import { Cloud, Droplets, Gauge, Thermometer, Wind } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   mapType: string;
@@ -14,6 +15,16 @@ export default function LayerTypes({
   windParticlesEnabled,
   setWindParticlesEnabled,
 }: Props) {
+  const { t } = useTranslation();
+
+  const items = [
+    { value: "temp_new", labelKey: "layers.temperature", Icon: Thermometer },
+    { value: "pressure_new", labelKey: "layers.pressure", Icon: Gauge },
+    { value: "wind_new", labelKey: "layers.windSpeed", Icon: Wind },
+    { value: "precipitation_new", labelKey: "layers.precipitation", Icon: Droplets },
+    { value: "clouds_new", labelKey: "layers.clouds", Icon: Cloud },
+  ];
+
   return (
     <div className="w-[220px] rounded-2xl border border-border bg-card/60 backdrop-blur-md shadow-2xl overflow-hidden">
       <div className="p-2 space-y-2">
@@ -34,7 +45,7 @@ export default function LayerTypes({
               ].join(" ")}
             >
               <Icon className="size-4.5 shrink-0 opacity-90" />
-              <span className="truncate">{item.label}</span>
+              <span className="truncate">{t(item.labelKey)}</span>
             </button>
           );
         })}
@@ -43,22 +54,22 @@ export default function LayerTypes({
       <div className="h-px bg-border/70" />
 
       <div className="p-3 flex items-center justify-between gap-3">
-        <div className="text-sm text-muted-foreground">Wind particles</div>
+        <div className="text-sm text-muted-foreground">{t("layers.windParticles")}</div>
         <button
           type="button"
           role="switch"
           aria-checked={windParticlesEnabled}
           onClick={() => setWindParticlesEnabled((v) => !v)}
           className={[
-            "relative w-12 h-7 rounded-full border transition-colors",
+            "relative w-12 h-7 rounded-full border-2 transition-colors",
             windParticlesEnabled
-              ? "bg-primary/90 border-primary/50"
-              : "bg-muted/50 border-border",
+              ? "bg-primary/90 border-primary"
+              : "bg-muted/50 border-muted-foreground/40",
           ].join(" ")}
         >
           <span
             className={[
-              "absolute top-0.5 left-0.5 size-6 rounded-full bg-background shadow-sm transition-transform",
+              "absolute top-0.5 left-0.5 size-5 rounded-full bg-background shadow transition-transform",
               windParticlesEnabled ? "translate-x-5" : "translate-x-0",
             ].join(" ")}
           />
@@ -68,10 +79,3 @@ export default function LayerTypes({
   );
 }
 
-const items = [
-  { value: "temp_new", label: "Temperature", Icon: Thermometer },
-  { value: "pressure_new", label: "Pressure", Icon: Gauge },
-  { value: "wind_new", label: "Wind speed", Icon: Wind },
-  { value: "precipitation_new", label: "Precipitation", Icon: Droplets },
-  { value: "clouds_new", label: "Clouds", Icon: Cloud },
-];

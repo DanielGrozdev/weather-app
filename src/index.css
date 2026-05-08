@@ -187,3 +187,64 @@
     @apply font-sans;
   }
 }
+
+/* ─── Custom weather marker ──────────────────────────────────────────────── */
+
+/* Strip Leaflet's default white box + border from the divIcon wrapper */
+.weather-marker-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* ─── Weather marker tooltip ─────────────────────────────────────────────── */
+
+/* Replace Leaflet's default white-box tooltip with a dark frosted-glass panel */
+.leaflet-tooltip.weather-marker-tooltip {
+  background: rgba(10, 14, 26, 0.88) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45) !important;
+  padding: 0 !important;
+  color: #fff !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  font-family: ui-sans-serif, system-ui, sans-serif !important;
+  /* Animate in */
+  transition: opacity 0.15s ease !important;
+}
+
+/* Hide Leaflet's built-in tooltip arrow */
+.leaflet-tooltip.weather-marker-tooltip::before {
+  display: none !important;
+}
+.leaflet-control-attribution {
+  display: none;
+}
+
+/* Inner content wrapper */
+.wmt-inner {
+  padding: 10px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 148px;
+}
+
+/* Each data row */
+.wmt-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 12.5px;
+  line-height: 1.3;
+}
+
+.wmt-row > span:first-child {
+  color: rgba(255, 255, 255, 0.48);
+}
+
+.wmt-row > span:last-child {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}

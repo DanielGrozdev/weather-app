@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight, GripHorizontal } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   valueMinutes: number;
@@ -34,6 +35,7 @@ export default function TimeScrubber({
   containerRef,
   className,
 }: Props) {
+  const { t } = useTranslation();
   const rootRef = useRef<HTMLDivElement>(null);
   const dragState = useRef<{
     startX: number;
@@ -149,7 +151,7 @@ export default function TimeScrubber({
       >
         <div className="flex items-center gap-2 text-muted-foreground">
           <GripHorizontal className="size-4" />
-          <span className="text-xs uppercase tracking-wider">Time</span>
+          <span className="text-xs uppercase tracking-wider">{t("timeScrubber.label")}</span>
         </div>
         <div className="text-xs text-muted-foreground tabular-nums">
           {label}
@@ -159,7 +161,7 @@ export default function TimeScrubber({
       <div className="px-3 pb-3 flex items-center gap-3">
         <button
           type="button"
-          aria-label="Step back"
+          aria-label={t("timeScrubber.stepBack")}
           onClick={() =>
             onChangeMinutes(
               clamp(valueMinutes - STEP_MINUTES, MIN_MINUTES, MAX_MINUTES),
@@ -182,7 +184,7 @@ export default function TimeScrubber({
 
         <button
           type="button"
-          aria-label="Step forward"
+          aria-label={t("timeScrubber.stepForward")}
           onClick={() =>
             onChangeMinutes(
               clamp(valueMinutes + STEP_MINUTES, MIN_MINUTES, MAX_MINUTES),

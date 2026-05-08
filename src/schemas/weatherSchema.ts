@@ -28,6 +28,9 @@ export const weatherSchema = z.object({
         icon: z.string(),
       }),
     ),
+    // Present only when it is actually raining/snowing
+    rain: z.object({ "1h": z.number() }).optional(),
+    snow: z.object({ "1h": z.number() }).optional(),
   }),
   hourly: z.array(
     z.object({
@@ -52,6 +55,8 @@ export const weatherSchema = z.object({
         }),
       ),
       pop: z.number(),
+      rain: z.object({ "1h": z.number() }).optional(),
+      snow: z.object({ "1h": z.number() }).optional(),
     }),
   ),
   daily: z.array(

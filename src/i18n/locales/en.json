@@ -1,0 +1,52 @@
+{
+  "search": {
+    "placeholder": "Search cities…",
+    "clearSearch": "Clear search",
+    "recent": "Recent",
+    "clear": "Clear",
+    "error": "Couldn't load suggestions. Try again.",
+    "noResults": "No cities match \"{{query}}\""
+  },
+  "overlay": {
+    "locating": "Locating…",
+    "droppedPin": "Dropped pin",
+    "refreshing": "Refreshing",
+    "feelsLike": "Feels like",
+    "windSpeed": "Wind speed",
+    "windDirection": "Wind direction",
+    "humidity": "Humidity",
+    "clouds": "Clouds",
+    "pressure": "Pressure",
+    "collapseDetails": "Collapse details",
+    "expandDetails": "Expand details"
+  },
+  "layers": {
+    "temperature": "Temperature",
+    "pressure": "Pressure",
+    "windSpeed": "Wind speed",
+    "precipitation": "Precipitation",
+    "clouds": "Clouds",
+    "windParticles": "Wind particles"
+  },
+  "timeScrubber": {
+    "label": "Time slider",
+    "stepBack": "Step back",
+    "stepForward": "Step forward"
+  },
+  "controls": {
+    "hideOverlays": "Hide overlays",
+    "showOverlays": "Show overlays",
+    "switchToFahrenheit": "Switch to Fahrenheit",
+    "switchToCelsius": "Switch to Celsius"
+  },
+  "tooltip": {
+    "temperature": "Temperature",
+    "windSpeed": "Wind speed",
+    "pressure": "Pressure"
+  },
+  "language": {
+    "en": "EN",
+    "bg": "BG",
+    "fr": "FR"
+  }
+}
