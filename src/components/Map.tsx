@@ -1,7 +1,6 @@
 import {
   MapContainer,
   Marker,
-  TileLayer,
   Tooltip,
   useMap,
   useMapEvents,
@@ -10,8 +9,8 @@ import { MaptilerLayer, MapStyle } from "@maptiler/leaflet-maptilersdk";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Coords } from "../types";
-import { useEffect } from "react";
-import { WindParticlesLayer } from "./WindParticles";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+// import { WindParticlesLayer } from "./WindParticles";
 import { useQuery } from "@tanstack/react-query";
 import { getWeather, reverseGeocode } from "../api";
 import { useUnits } from "../hooks/useUnits";
@@ -19,6 +18,7 @@ import { formatTemp, formatWindSpeed } from "../lib/format";
 import type { CityResult } from "../types";
 import type { Units } from "../context/units-context";
 import { useTranslation } from "react-i18next";
+import { WebGLWeatherLayer, type WeatherLayer } from "./WebGLWeatherLayer";
 
 const API_KEY = import.meta.env.VITE_API_KEY;
 
@@ -141,24 +141,39 @@ export default function Map({
   coords,
   onMapClick,
   mapType,
-  windParticlesEnabled,
+  // windParticlesEnabled,
   timeOffsetMinutes = 0,
   selectedCity,
 }: Props) {
   const { lat, lon } = coords;
-  const tileUrl = buildTileUrl(mapType, API_KEY, timeOffsetMinutes);
+  const tileUrl = useMemo(
+    () => buildTileUrl(mapType, API_KEY, timeOffsetMinutes),
+    [mapType, timeOffsetMinutes],
+  );
+  const tileRef = useRef<L.TileLayer | null>(null);
+
+  useEffect(() => {
+    if (!tileRef.current) return;
+
+    tileRef.current.setUrl(tileUrl);
+  }, [tileUrl]);
 
   return (
     <MapContainer
       center={[lat, lon]}
       zoomControl={false}
+      preferCanvas
       zoom={6}
+      minZoom={2}
+      maxZoom={12}
+      zoomSnap={0.5}
+      zoomDelta={1}
       style={{ width: "100%", height: "100vh" }}
     >
       <MapController onMapClick={onMapClick} coords={coords} />
-      <WindParticlesLayer enabled={windParticlesEnabled} coords={coords} />
+      {/* <WindParticlesLayer enabled={windParticlesEnabled} coords={coords} /> */}
       <MapTileLayer />
-      <TileLayer key={mapType} opacity={1} url={tileUrl} tileSize={256} />
+      <WeatherWebGLLayer url={tileUrl} />
       <CustomMarker
         coords={coords}
         mapType={mapType}
@@ -220,17 +235,20 @@ function CustomMarker({
   const { data } = useQuery({
     queryKey: ["weather", coords.lat, coords.lon, units],
     queryFn: () => getWeather({ lat: coords.lat, lon: coords.lon, units }),
-    staleTime: 5 * 60 * 1000,
   });
 
   // For precipitation the actual rain/snow volume is only in hourly data.
-  const display = data
-    ? mapType === "precipitation_new" &&
-      timeOffsetMinutes <= 0 &&
-      data.hourly.length > 0
-      ? data.hourly[0]
-      : pickDisplayData(data, timeOffsetMinutes)
-    : null;
+  const display = useMemo(() => {
+    if (!data) return null;
+
+    return data
+      ? mapType === "precipitation_new" &&
+        timeOffsetMinutes <= 0 &&
+        data.hourly.length > 0
+        ? data.hourly[0]
+        : pickDisplayData(data, timeOffsetMinutes)
+      : null;
+  }, [data, mapType, timeOffsetMinutes]);
 
   const cfg = LAYER_CONFIG[mapType] ?? FALLBACK_CONFIG;
   const value = display ? cfg.getValue(display, units) : "–";
@@ -238,12 +256,11 @@ function CustomMarker({
     ? cfg.getColors(display, units)
     : { bg: "#6b7280", glow: "rgba(107,114,128,0.4)" };
 
-  // City name shown inside the pill — null-safe fallback chain.
-  const locationLabel = selectedCity
-    ? `${selectedCity.name}, ${selectedCity.country}`
-    : pinnedCity
-      ? `${pinnedCity.name}, ${pinnedCity.country}`
-      : "";
+  const locationLabel = useMemo(() => {
+    if (selectedCity) return `${selectedCity.name}, ${selectedCity.country}`;
+    if (pinnedCity) return `${pinnedCity.name}, ${pinnedCity.country}`;
+    return "";
+  }, [selectedCity, pinnedCity]);
 
   // 120 px fits "101325 Pa" (pressure in Pa is the widest label) plus the icon.
   // Name label has min-height:16px so the anchor stays at a fixed 58 px from
@@ -281,12 +298,16 @@ function CustomMarker({
   `;
 
   // Total height: name(16) + gap(3) + pill(~28) + triangle(11) = 58 px
-  const icon = L.divIcon({
-    html: iconHtml,
-    className: "weather-marker-icon",
-    iconSize: [120, 58],
-    iconAnchor: [60, 58],
-  });
+  const icon = useMemo(
+    () =>
+      L.divIcon({
+        html: iconHtml,
+        className: "weather-marker-icon",
+        iconSize: [120, 58],
+        iconAnchor: [60, 58],
+      }),
+    [iconHtml],
+  );
 
   return (
     <Marker position={[coords.lat, coords.lon]} icon={icon}>
@@ -360,6 +381,12 @@ const MapController = ({
   coords: Coords;
 }) => {
   const map = useMap();
+  const handleClick = useCallback(
+    (e) => {
+      onMapClick(e.latlng.lat, e.latlng.lng);
+    },
+    [onMapClick],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -382,9 +409,7 @@ const MapController = ({
   }, [coords.lat, coords.lon, map]);
 
   useMapEvents({
-    click: (e) => {
-      onMapClick(e.latlng.lat, e.latlng.lng);
-    },
+    click: (e) => handleClick(e),
   });
 
   return null;
@@ -410,6 +435,40 @@ function MapTileLayer() {
       }
     };
   }, [map]);
+
+  return null;
+}
+
+function WeatherWebGLLayer({ url }: { url: string }) {
+  const map = useMap();
+  const layerRef = useRef<WeatherLayer | null>(null);
+
+  const buildLayer = (url: string) =>
+    new (WebGLWeatherLayer as new (...args: object[]) => object)({
+      tileSize: 256,
+      opacity: 0.75,
+      getTileUrl: (coords: { x: number; y: number; z: number }) =>
+        url
+          .replace("{z}", String(coords.z))
+          .replace("{x}", String(coords.x))
+          .replace("{y}", String(coords.y)),
+    }) as WeatherLayer;
+
+  useEffect(() => {
+    if (!map) return;
+
+    // first mount
+    if (!layerRef.current) {
+      layerRef.current = buildLayer(url);
+      layerRef.current.addTo(map);
+      return;
+    }
+
+    // full refresh on change (fixes stale tiles)
+    layerRef.current.remove();
+    layerRef.current = buildLayer(url);
+    layerRef.current.addTo(map);
+  }, [map, url]);
 
   return null;
 }

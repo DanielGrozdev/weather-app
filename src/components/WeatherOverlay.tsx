@@ -119,7 +119,9 @@ export default function WeatherOverlay({
           {isFetching ? (
             <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1 shrink-0">
               <span className="inline-block size-2 rounded-full bg-sky-400/80 animate-pulse" />
-              <span className="hidden sm:inline">{t("overlay.refreshing")}</span>
+              <span className="hidden sm:inline">
+                {t("overlay.refreshing")}
+              </span>
             </div>
           ) : null}
         </div>
@@ -148,7 +150,8 @@ export default function WeatherOverlay({
                 <div className="flex flex-col text-4xl font-semibold">
                   <span>{formatTemp(display.temp, units)}</span>
                   <span className="text-sm font-light">
-                    {t("overlay.feelsLike")} {formatTemp(display.feels_like, units)}
+                    {t("overlay.feelsLike")}{" "}
+                    {formatTemp(display.feels_like, units)}
                   </span>
                 </div>
               </div>
@@ -160,7 +163,9 @@ export default function WeatherOverlay({
 
             <button
               type="button"
-              aria-label={t(expanded ? "overlay.collapseDetails" : "overlay.expandDetails")}
+              aria-label={t(
+                expanded ? "overlay.collapseDetails" : "overlay.expandDetails",
+              )}
               onClick={() => setExpanded((v) => !v)}
               className={[
                 "size-9 rounded-full grid place-items-center",

@@ -9,7 +9,7 @@ import { legendConfigMap } from "./lib/consts";
 import WeatherOverlay from "./components/WeatherOverlay";
 import TimeScrubber from "./components/TimeScrubber";
 import { Eye, EyeOff } from "lucide-react";
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
 import { useUnits } from "./hooks/useUnits";
 import { useTranslation } from "react-i18next";
 import LanguageSwitcher from "./components/LanguageSwitcher";
@@ -33,17 +33,17 @@ function App() {
 
   const { units, toggle: toggleUnits } = useUnits();
   const { t } = useTranslation();
-  const config = legendConfigMap[mapType];
+  const config = useMemo(() => legendConfigMap[mapType], [mapType]);
   const mapOverlayRef = useRef<HTMLDivElement>(null);
 
   return (
     <div className="flex flex-col gap-8">
       <div ref={mapOverlayRef} className="relative">
-        <div className="absolute -left-2 -top-5 z-1100 pointer-events-auto">
+        <div className="absolute left-2 top-2 z-1100 pointer-events-auto">
           <img
             src={Logo}
-            alt="Weather app"
-            className="h-24 select-none opacity-50"
+            alt="Breezy"
+            className="h-12 select-none opacity-75"
             draggable={false}
           />
         </div>

@@ -93,7 +93,6 @@ export function WindParticlesLayer({
   const { data } = useQuery({
     queryKey: ["weather", coords.lat, coords.lon, units],
     queryFn: () => getWeather({ lat: coords.lat, lon: coords.lon, units }),
-    staleTime: 5 * 60 * 1000,
     enabled: !!enabled,
   });
 
@@ -156,8 +155,7 @@ export function WindParticlesLayer({
 
         // Smooth fade-in (0→0.12) and fade-out (0.72→1.0) envelope.
         const t = p.age / p.maxAge;
-        const alpha =
-          t < 0.12 ? t / 0.12 : t > 0.72 ? (1 - t) / 0.28 : 1;
+        const alpha = t < 0.12 ? t / 0.12 : t > 0.72 ? (1 - t) / 0.28 : 1;
 
         // Line width varies slightly with per-particle speed for depth.
         const lw = 0.85 + (p.speed / basePx) * 0.4;

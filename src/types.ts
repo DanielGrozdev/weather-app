@@ -3,6 +3,12 @@ export type Coords = {
   lon: number;
 };
 
+export type WeatherLayerOptions = {
+  tileSize: number;
+  opacity: number;
+  getTileUrl: (coords: { x: number; y: number; z: number }) => string;
+};
+
 /**
  * A geocoded city result from the OpenWeather direct geocode endpoint,
  * normalized to the fields we actually consume in the UI.
