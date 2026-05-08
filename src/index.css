@@ -225,7 +225,7 @@
 }
 
 .leaflet-tile {
-  transition: opacity 150ms linear;
+  transition: opacity 180ms linear;
 }
 
 /* Inner content wrapper */

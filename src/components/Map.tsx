@@ -522,8 +522,9 @@ function WeatherWebGLLayer({ url }: { url: string }) {
     ) => WeatherLayer)({
       tileSize: 256,
       opacity: 0.7,
-      keepBuffer: 2,
+      keepBuffer: 4,
       updateWhenZooming: true,
+      updateWhenIdle: false,
       getTileUrl: (coords: WeatherTileCoords) =>
         url
           .replace("{z}", String(coords.z))

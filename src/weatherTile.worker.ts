@@ -1,5 +1,9 @@
+const cache = new Map<string, ImageBitmap>();
+
 self.onmessage = async (e) => {
   const { id, url, width, height } = e.data;
+
+  const cacheKey = url;
 
   const canvas = new OffscreenCanvas(width, height);
   const ctx = canvas.getContext("2d");
@@ -7,9 +11,14 @@ self.onmessage = async (e) => {
   if (!ctx) return;
 
   try {
-    const res = await fetch(url);
-    const blob = await res.blob();
-    const img = await createImageBitmap(blob);
+    let img = cache.get(cacheKey);
+
+    if (!img) {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      img = await createImageBitmap(blob);
+      cache.set(cacheKey, img);
+    }
 
     ctx.drawImage(img, 0, 0, width, height);
 

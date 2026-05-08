@@ -34,6 +34,7 @@ export const WebGLWeatherLayer = L.GridLayer.extend({
     const url = this.options.getTileUrl(coords);
 
     const id = requestId++;
+    let isCancelled = false;
 
     worker.postMessage({
       id,
@@ -46,8 +47,7 @@ export const WebGLWeatherLayer = L.GridLayer.extend({
     const handler = (e: MessageEvent) => {
       const { bitmap, id: resId } = e.data;
 
-      // ignore old/outdated responses
-      if (resId !== id) return;
+      if (resId !== id || isCancelled) return;
 
       ctx.clearRect(0, 0, size.x, size.y);
       ctx.drawImage(bitmap, 0, 0);
@@ -56,6 +56,12 @@ export const WebGLWeatherLayer = L.GridLayer.extend({
     };
 
     worker.addEventListener("message", handler);
+
+    // 👇 IMPORTANT: Leaflet will discard tiles aggressively
+    tile.remove = () => {
+      isCancelled = true;
+      worker.removeEventListener("message", handler);
+    };
 
     return tile;
   },
