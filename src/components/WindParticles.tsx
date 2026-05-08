@@ -1,199 +1,288 @@
 /**
- * WindParticlesLayer
+ * WindParticlesLayer — vector-field particle visualisation
  *
- * Canvas-based wind particle visualisation that runs in screen space (the
- * canvas is appended directly to the Leaflet container, not to a pane that
- * gets CSS-transformed on pan/zoom). Particles flow in the real wind direction
- * from the weather API, leave fading trails, and respawn from the upwind edge
- * so the field always looks full.
+ * Grid source : Open-Meteo (free, no key) — 3×3 points centered on coords
+ * Interpolation: bilinear from the 4 surrounding grid cells
+ * Particles    : PARTICLE_COUNT points in geographic (lat/lon) space
+ * Render loop  : rAF canvas overlay, z-index 450 on the Leaflet container
  *
- * Wind convention: meteorological degrees = direction FROM which wind blows.
- *   → vx = -sin(windRad)   (east component, positive = eastward in canvas)
- *   → vy =  cos(windRad)   (south component, positive = downward in canvas)
+ * Consistency guarantee:
+ *   coordsBoundsFor() places the center grid cell at exactly (coords.lat, lon).
+ *   sampleGrid at that point returns the raw Open-Meteo value — the same number
+ *   shown by useWindAtPoint in the overlay.  Both consumers share the React Query
+ *   cache entry ["windGrid", minLat, maxLat, minLon, maxLon].
  */
 
-import { useEffect, useRef } from "react";
-import { useMap } from "react-leaflet";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useMap, useMapEvents } from "react-leaflet";
 import { useQuery } from "@tanstack/react-query";
-import { getWeather } from "../api";
-import type { Coords } from "../types";
-import { useUnits } from "../hooks/useUnits";
+import {
+  coordsBoundsFor,
+  fetchWindGrid,
+  sampleGrid,
+  stableBounds,
+  type BoundsRect,
+  type WindGrid,
+} from "../lib/windGrid";
 
-// ─── Particle type ───────────────────────────────────────────────────────────
+// ─── Particle type ────────────────────────────────────────────────────────────
 
 type Particle = {
-  x: number;
-  y: number;
-  /** Previous position — used to draw a line segment each frame */
-  px: number;
-  py: number;
-  /** Pixels-per-frame speed for this individual particle */
-  speed: number;
+  lat: number;
+  lon: number;
+  prevLat: number;
+  prevLon: number;
   age: number;
   maxAge: number;
+  speedMult: number;
 };
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
 
-function spawnParticle(
-  w: number,
-  h: number,
-  vx: number,
-  vy: number,
-  basePx: number,
-  fromEdge: boolean,
-): Particle {
-  let x: number, y: number;
+const PARTICLE_COUNT = 1400;
 
-  if (fromEdge) {
-    // Spawn from the upwind edge so particles visibly travel across the screen.
-    if (Math.abs(vx) >= Math.abs(vy)) {
-      x = vx > 0 ? -8 : w + 8;
-      y = Math.random() * h;
-    } else {
-      x = Math.random() * w;
-      y = vy > 0 ? -8 : h + 8;
-    }
-  } else {
-    x = Math.random() * w;
-    y = Math.random() * h;
-  }
+/**
+ * Simulation seconds per animation frame at BASE_ZOOM.
+ * Halves for each zoom level above BASE_ZOOM so visual speed stays constant.
+ */
+const DT_BASE = 300;
+const BASE_ZOOM = 6;
+const MARGIN_PX = 60;
 
-  const speed = basePx * (0.35 + Math.random() * 1.2);
+// ─── Map bounds helper ────────────────────────────────────────────────────────
+
+function getMapBounds(map: L.Map): BoundsRect {
+  const b = map.getBounds();
   return {
-    x,
-    y,
-    // Set previous position one step back so the first frame draws a segment.
-    px: x - vx * speed,
-    py: y - vy * speed,
-    speed,
-    age: fromEdge ? 0 : Math.random() * 80,
-    maxAge: 55 + Math.random() * 90,
+    minLat: b.getSouth(),
+    maxLat: b.getNorth(),
+    minLon: b.getWest(),
+    maxLon: b.getEast(),
   };
 }
 
-function isOffCanvas(p: Particle, w: number, h: number) {
-  return p.x < -24 || p.x > w + 24 || p.y < -24 || p.y > h + 24;
+// ─── Particle factory ─────────────────────────────────────────────────────────
+
+function spawnParticle(b: BoundsRect, preAge = false): Particle {
+  const lat = b.minLat + Math.random() * (b.maxLat - b.minLat);
+  const lon = b.minLon + Math.random() * (b.maxLon - b.minLon);
+  const maxAge = 80 + Math.random() * 120;
+  return {
+    lat,
+    lon,
+    prevLat: lat,
+    prevLon: lon,
+    age: preAge ? Math.random() * maxAge : 0,
+    maxAge,
+    speedMult: 0.6 + Math.random() * 0.8,
+  };
 }
 
-// ─── component ───────────────────────────────────────────────────────────────
+// ─── Component ────────────────────────────────────────────────────────────────
+
+type Coords = { lat: number; lon: number };
 
 export function WindParticlesLayer({
   enabled,
   coords,
 }: {
   enabled?: boolean;
-  coords: Coords;
+  coords?: Coords;
 }) {
   const map = useMap();
-  const { units } = useUnits();
-  const rafRef = useRef<number>(0);
 
-  // Same query key as WeatherOverlay → guaranteed React Query cache hit.
-  const { data } = useQuery({
-    queryKey: ["weather", coords.lat, coords.lon, units],
-    queryFn: () => getWeather({ lat: coords.lat, lon: coords.lon, units }),
+  // ── Grid fetching ─────────────────────────────────────────────────────────
+
+  /**
+   * coordsBoundsFor keeps the center cell at exactly (coords.lat, coords.lon)
+   * — no stableBounds shift.  Coords is already rounded to 2 dp upstream so
+   * the query key is naturally stable without extra snapping.
+   */
+  const coordsBounds = useMemo<BoundsRect | null>(
+    () => (coords ? coordsBoundsFor(coords.lat, coords.lon) : null),
+    [coords?.lat, coords?.lon],
+  );
+
+  /** Map-viewport bounds — only updated from event handlers (no setState in effects). */
+  const [mapBounds, setMapBounds] = useState<BoundsRect>(() =>
+    stableBounds(getMapBounds(map)),
+  );
+
+  useMapEvents({
+    moveend: () => setMapBounds(stableBounds(getMapBounds(map))),
+    zoomend: () => setMapBounds(stableBounds(getMapBounds(map))),
+  });
+
+  // coordsBounds wins so the center cell matches coords exactly.
+  // mapBounds covers the particle field when the user pans away.
+  const activeBounds = coordsBounds ?? mapBounds;
+
+  const { data: grid } = useQuery({
+    queryKey: [
+      "windGrid",
+      activeBounds.minLat,
+      activeBounds.maxLat,
+      activeBounds.minLon,
+      activeBounds.maxLon,
+    ],
+    queryFn: () => fetchWindGrid(activeBounds),
+    staleTime: 10 * 60 * 1000,
     enabled: !!enabled,
   });
 
+  // Swap the grid reference without restarting the render loop so particles
+  // continue uninterrupted while new data loads.
+  const gridRef = useRef<WindGrid | null>(null);
   useEffect(() => {
-    if (!enabled || !data) return;
+    if (grid) gridRef.current = grid;
+  }, [grid]);
+
+  // ── Refs shared between the flush effect and the render loop ──────────────
+
+  const particlesRef = useRef<Particle[]>([]);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  /**
+   * When coords change (new city / map click):
+   *   - Immediately respawn all particles in the current viewport at age=0 so
+   *     they fade in at the new location.  We deliberately keep the old grid
+   *     so particles start moving right away (slightly wrong direction for ~0.5s)
+   *     rather than freezing until the new grid arrives.
+   *   - Clear the canvas so stale trails from the previous location vanish instantly.
+   */
+  useEffect(() => {
+    if (!coords) return;
+    const visB = getMapBounds(map);
+    particlesRef.current = Array.from({ length: PARTICLE_COUNT }, () =>
+      spawnParticle(visB, false),
+    );
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext("2d");
+      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  }, [coords?.lat, coords?.lon, map]);
+
+  // ── Render loop — only restarted when enabled/map changes ────────────────
+
+  useEffect(() => {
+    if (!enabled) return;
 
     const container = map.getContainer();
-    const rect = container.getBoundingClientRect();
-    const w = rect.width || 800;
-    const h = rect.height || 600;
+    const { width: cw, height: ch } = container.getBoundingClientRect();
+    const W = cw || 800;
+    const H = ch || 600;
 
-    // ── Canvas ────────────────────────────────────────────────────────────
     const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
-    // Append directly to the Leaflet container (position: relative), NOT to a
-    // pane. Panes receive a CSS transform on pan/zoom which would shift the
-    // canvas; the container div itself never moves.
+    canvas.width = W;
+    canvas.height = H;
     canvas.style.cssText =
       "position:absolute;top:0;left:0;width:100%;height:100%;" +
       "pointer-events:none;z-index:450;";
     container.appendChild(canvas);
+    canvasRef.current = canvas;
 
     const ctx = canvas.getContext("2d")!;
 
-    // ── Wind vector ───────────────────────────────────────────────────────
-    const windSpeed = data.current.wind_speed; // m/s (metric) or mph (imperial)
-    const windDeg = data.current.wind_deg;
-    const windRad = (windDeg * Math.PI) / 180;
+    // Seed on first mount (pre-aged so the field looks full immediately).
+    if (particlesRef.current.length === 0) {
+      const initB = getMapBounds(map);
+      particlesRef.current = Array.from({ length: PARTICLE_COUNT }, () =>
+        spawnParticle(initB, true),
+      );
+    }
 
-    // Particles move AWAY from the source direction.
-    const vx = -Math.sin(windRad);
-    const vy = Math.cos(windRad);
+    const raf = { id: 0 };
 
-    // Map wind speed to a comfortable pixel-per-frame range (0.5 – 5.5 px).
-    const basePx = Math.max(0.5, Math.min(windSpeed * 0.22, 5.5));
-
-    // ── Particle colour ───────────────────────────────────────────────────
-    // Light winds → cool dim blue; strong winds → bright saturated blue-white.
-    const speedRatio = Math.min(windSpeed / 20, 1);
-    const r = Math.round(150 + speedRatio * 70);
-    const g = Math.round(195 + speedRatio * 30);
-    const b = 255;
-
-    // ── Particles ─────────────────────────────────────────────────────────
-    const PARTICLE_COUNT = 300;
-    const particles: Particle[] = Array.from({ length: PARTICLE_COUNT }, () =>
-      spawnParticle(w, h, vx, vy, basePx, false),
-    );
-
-    // ── Render loop ───────────────────────────────────────────────────────
     const render = () => {
-      // Semi-transparent overlay fades previous trail segments each frame.
-      // Lower alpha = longer, more persistent trails.
-      ctx.fillStyle = "rgba(8,12,22,0.10)";
-      ctx.fillRect(0, 0, w, h);
+      // Long dreamy trails: erase only 4% of canvas alpha per frame.
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.fillStyle = "rgba(0,0,0,0.04)";
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalCompositeOperation = "source-over";
 
-      for (const p of particles) {
-        p.age++;
+      const g = gridRef.current;
+      if (!g) {
+        raf.id = requestAnimationFrame(render);
+        return;
+      }
 
-        // Smooth fade-in (0→0.12) and fade-out (0.72→1.0) envelope.
+      const zoom = map.getZoom();
+      const dt = DT_BASE / Math.pow(2, zoom - BASE_ZOOM);
+      const visB = getMapBounds(map);
+
+      // Re-seed (shouldn't normally be empty here, but guards against races).
+      if (particlesRef.current.length === 0) {
+        particlesRef.current = Array.from({ length: PARTICLE_COUNT }, () =>
+          spawnParticle(visB, true),
+        );
+      }
+
+      for (const p of particlesRef.current) {
+        p.age += 1;
+
         const t = p.age / p.maxAge;
         const alpha = t < 0.12 ? t / 0.12 : t > 0.72 ? (1 - t) / 0.28 : 1;
+        if (alpha <= 0) {
+          Object.assign(p, spawnParticle(visB));
+          continue;
+        }
 
-        // Line width varies slightly with per-particle speed for depth.
-        const lw = 0.85 + (p.speed / basePx) * 0.4;
+        const prev = map.latLngToContainerPoint([p.prevLat, p.prevLon] as [
+          number,
+          number,
+        ]);
+        const cur = map.latLngToContainerPoint([p.lat, p.lon] as [
+          number,
+          number,
+        ]);
+
+        const { u, v } = sampleGrid(g, p.lat, p.lon);
+        const spd = Math.hypot(u, v);
+
+        const ratio = Math.min(spd / 15, 1);
+        const rCh = Math.round(110 + ratio * 145);
+        const gCh = Math.round(160 + ratio * 95);
 
         ctx.save();
-        ctx.globalAlpha = alpha * 0.58;
-        ctx.strokeStyle = `rgb(${r},${g},${b})`;
-        ctx.lineWidth = lw;
+        ctx.globalAlpha = alpha * 0.65;
+        ctx.strokeStyle = `rgb(${rCh},${gCh},255)`;
+        ctx.lineWidth = 0.75 + ratio * 0.75;
         ctx.lineCap = "round";
         ctx.beginPath();
-        ctx.moveTo(p.px, p.py);
-        ctx.lineTo(p.x, p.y);
+        ctx.moveTo(prev.x, prev.y);
+        ctx.lineTo(cur.x, cur.y);
         ctx.stroke();
         ctx.restore();
 
-        // Advance position
-        p.px = p.x;
-        p.py = p.y;
-        p.x += vx * p.speed;
-        p.y += vy * p.speed;
+        p.prevLat = p.lat;
+        p.prevLon = p.lon;
+        const latRad = (p.lat * Math.PI) / 180;
+        p.lat += (v * dt * p.speedMult) / 111_320;
+        p.lon += (u * dt * p.speedMult) / (111_320 * Math.cos(latRad));
 
-        // Respawn from upwind edge once the particle ages out or leaves canvas
-        if (p.age > p.maxAge || isOffCanvas(p, w, h)) {
-          Object.assign(p, spawnParticle(w, h, vx, vy, basePx, true));
+        if (
+          p.age > p.maxAge ||
+          cur.x < -MARGIN_PX ||
+          cur.x > W + MARGIN_PX ||
+          cur.y < -MARGIN_PX ||
+          cur.y > H + MARGIN_PX
+        ) {
+          Object.assign(p, spawnParticle(visB));
         }
       }
 
-      rafRef.current = requestAnimationFrame(render);
+      raf.id = requestAnimationFrame(render);
     };
 
-    rafRef.current = requestAnimationFrame(render);
+    raf.id = requestAnimationFrame(render);
 
     return () => {
-      cancelAnimationFrame(rafRef.current);
+      cancelAnimationFrame(raf.id);
+      canvasRef.current = null;
       if (container.contains(canvas)) container.removeChild(canvas);
     };
-    // Re-run when location/wind data changes or enabled toggles.
-  }, [map, enabled, data]);
+  }, [map, enabled]);
 
   return null;
 }

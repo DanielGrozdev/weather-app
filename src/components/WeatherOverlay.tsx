@@ -2,6 +2,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ChevronDown, Clock } from "lucide-react";
 import { useMemo, useState } from "react";
 import { getWeather, reverseGeocode } from "../api";
+import { useWindAtPoint } from "../hooks/useWindAtPoint";
 import { useUnits } from "../hooks/useUnits";
 import { formatTemp, formatWindSpeed } from "../lib/format";
 import type { CityResult, Coords } from "../types";
@@ -92,6 +93,10 @@ export default function WeatherOverlay({
     queryFn: () => getWeather({ lat: coords.lat, lon: coords.lon, units }),
     placeholderData: keepPreviousData,
   });
+
+  // Samples the same wind grid as WindParticlesLayer — guaranteed to match
+  // the particle direction at this location (identical React Query cache entry).
+  const omWind = useWindAtPoint(coords, units);
 
   const display = useMemo(
     () => (data ? getDisplayData(data, timeOffsetMinutes) : null),
@@ -196,13 +201,18 @@ export default function WeatherOverlay({
               },
               {
                 label: t("overlay.windSpeed"),
-                value: formatWindSpeed(display.wind_speed, units),
+                value: formatWindSpeed(
+                  omWind?.wind_speed ?? display.wind_speed,
+                  units,
+                ),
               },
               {
                 label: t("overlay.windDirection"),
                 value: (
                   <UpArrow
-                    style={{ transform: `rotate(${display.wind_deg}deg)` }}
+                    style={{
+                      transform: `rotate(${((omWind?.wind_deg ?? display.wind_deg) + 180) % 360}deg)`,
+                    }}
                     className="size-5 opacity-90"
                   />
                 ),

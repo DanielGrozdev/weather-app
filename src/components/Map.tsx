@@ -10,9 +10,10 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Coords } from "../types";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-// import { WindParticlesLayer } from "./WindParticles";
+import { WindParticlesLayer } from "./WindParticles";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { getWeather, reverseGeocode } from "../api";
+import { useWindAtPoint } from "../hooks/useWindAtPoint";
 import { useUnits } from "../hooks/useUnits";
 import { formatTemp, formatWindSpeed } from "../lib/format";
 import type { CityResult } from "../types";
@@ -217,7 +218,7 @@ export default function Map({
   coords,
   onMapClick,
   mapType,
-  // windParticlesEnabled,
+  windParticlesEnabled,
   timeOffsetMinutes = 0,
   selectedCity,
 }: Props) {
@@ -240,7 +241,7 @@ export default function Map({
       style={{ width: "100%", height: "100vh" }}
     >
       <MapController onMapClick={onMapClick} coords={coords} />
-      {/* <WindParticlesLayer enabled={windParticlesEnabled} coords={coords} /> */}
+      <WindParticlesLayer enabled={windParticlesEnabled} coords={coords} />
       <MapTileLayer />
       <WeatherWebGLLayer url={tileUrl} />
       <CustomMarker
@@ -310,6 +311,9 @@ function CustomMarker({
     staleTime: 5 * 60 * 1000,
     placeholderData: keepPreviousData,
   });
+
+  // Same wind grid as WindParticlesLayer and WeatherOverlay — shared cache entry.
+  const omWind = useWindAtPoint(coords, units);
 
   // ── Step 1: memoize all derived values so the icon is only rebuilt when
   // something actually changed, not on every parent render.
@@ -391,7 +395,7 @@ function CustomMarker({
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   style={{
-                    transform: `rotate(${display.wind_deg}deg)`,
+                    transform: `rotate(${((omWind?.wind_deg ?? display.wind_deg) + 180) % 360}deg)`,
                     display: "inline-block",
                     flexShrink: 0,
                     opacity: 0.75,
@@ -400,7 +404,7 @@ function CustomMarker({
                   <path d="M12 19V5" />
                   <path d="m5 12 7-7 7 7" />
                 </svg>
-                {formatWindSpeed(display.wind_speed, units)}
+                {formatWindSpeed(omWind?.wind_speed ?? display.wind_speed, units)}
               </span>
             </div>
             <div className="wmt-row">

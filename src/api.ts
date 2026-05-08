@@ -1,4 +1,32 @@
 import type { Units } from "./context/units-context";
+
+/**
+ * Fetch current wind speed + direction from Open-Meteo for a single point.
+ * Used to keep the overlay / marker tooltip consistent with the particle field
+ * (both sourced from Open-Meteo / ECMWF rather than OpenWeatherMap).
+ *
+ * wind_speed is returned in m/s (metric) or mph (imperial) so it drops
+ * straight into formatWindSpeed without further conversion.
+ * wind_deg is the meteorological FROM-direction (0 = wind coming from north).
+ */
+export async function getOpenMeteoWind(
+  lat: number,
+  lon: number,
+  units: Units,
+): Promise<{ wind_speed: number; wind_deg: number }> {
+  const windUnit = units === "imperial" ? "mph" : "ms";
+  const url =
+    `https://api.open-meteo.com/v1/forecast` +
+    `?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}` +
+    `&current=wind_speed_10m,wind_direction_10m&wind_speed_unit=${windUnit}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Open-Meteo wind fetch failed (${res.status})`);
+  const d = await res.json();
+  return {
+    wind_speed: d.current?.wind_speed_10m ?? 0,
+    wind_deg: d.current?.wind_direction_10m ?? 0,
+  };
+}
 import { GeocodeSchema } from "./schemas/geocodeSchema";
 import { weatherSchema } from "./schemas/weatherSchema";
 import { cityKey, type CityResult } from "./types";
