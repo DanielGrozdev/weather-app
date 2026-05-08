@@ -49,11 +49,18 @@ export function useWeatherApp() {
   );
   const toggleOverlays = useCallback(() => setOverlaysVisible((v) => !v), []);
 
-  const coords: Coords =
+  // Round to 2 dp (~1 km grid) so all downstream React Query keys stay stable
+  // while the user pans the map — prevents refetch churn on minor movements.
+  const rawCoords: Coords =
     customCoords ??
     (selectedCity
       ? { lat: selectedCity.lat, lon: selectedCity.lon }
       : { lat: DEFAULT_CITY.lat, lon: DEFAULT_CITY.lon });
+
+  const coords: Coords = {
+    lat: Math.round(rawCoords.lat * 100) / 100,
+    lon: Math.round(rawCoords.lon * 100) / 100,
+  };
 
   return {
     coords,

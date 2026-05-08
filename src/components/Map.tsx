@@ -11,7 +11,7 @@ import "leaflet/dist/leaflet.css";
 import type { Coords } from "../types";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 // import { WindParticlesLayer } from "./WindParticles";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { getWeather, reverseGeocode } from "../api";
 import { useUnits } from "../hooks/useUnits";
 import { formatTemp, formatWindSpeed } from "../lib/format";
@@ -64,9 +64,85 @@ type LayerConfig = {
   iconPaths: string;
 };
 
-// Small inline SVG icon builder (13 × 13 px, white stroke)
-function mkIcon(paths: string) {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.82)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="display:block;flex-shrink:0;">${paths}</svg>`;
+// ─── DOM marker builder (Step 4) ─────────────────────────────────────────────
+// Builds the pill + triangle DOM tree without innerHTML string concatenation.
+// L.divIcon accepts an HTMLElement directly for its `html` option, so we never
+// need to serialize this back to a string.
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+function makeSvgIcon(paths: string): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("width", "13");
+  svg.setAttribute("height", "13");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "rgba(255,255,255,0.82)");
+  svg.setAttribute("stroke-width", "2.2");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  svg.style.cssText = "display:block;flex-shrink:0;";
+  // paths is a trusted module-level constant, not user input
+  svg.innerHTML = paths;
+  return svg;
+}
+
+function createMarkerNode(
+  colors: MarkerColors,
+  iconPaths: string,
+  value: string,
+  locationLabel: string,
+): HTMLElement {
+  // Outer wrapper — carries the drop-shadow filter
+  const wrapper = document.createElement("div");
+  wrapper.style.cssText =
+    `display:flex;flex-direction:column;align-items:center;width:120px;` +
+    `filter:drop-shadow(0 4px 14px ${colors.glow});`;
+
+  // Pill
+  const pill = document.createElement("div");
+  pill.style.cssText =
+    `width:100px;flex-direction:column;display:flex;align-items:center;` +
+    `justify-content:center;gap:5px;background:${colors.bg};color:#E8E8E8;` +
+    `font-weight:700;font-size:13px;font-family:ui-sans-serif,system-ui,sans-serif;` +
+    `line-height:1.2;padding:5px 0;border-radius:10px;` +
+    `border:1.5px solid rgba(255,255,255,0.22);box-shadow:0 2px 6px rgba(0,0,0,0.28);`;
+
+  if (locationLabel) {
+    const name = document.createElement("span");
+    name.style.cssText =
+      `color:rgba(255,255,255,0.85);font-size:11px;font-weight:600;` +
+      `max-width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;`;
+    name.textContent = locationLabel;
+    pill.appendChild(name);
+  }
+
+  const row = document.createElement("div");
+  row.style.cssText =
+    "display:flex;align-items:center;justify-content:center;gap:5px;";
+  row.appendChild(makeSvgIcon(iconPaths));
+
+  const valueSpan = document.createElement("span");
+  valueSpan.textContent = value;
+  row.appendChild(valueSpan);
+
+  pill.appendChild(row);
+  wrapper.appendChild(pill);
+
+  // Triangle tip
+  const tip = document.createElementNS(SVG_NS, "svg");
+  tip.setAttribute("width", "16");
+  tip.setAttribute("height", "11");
+  tip.setAttribute("viewBox", "0 0 16 11");
+  tip.setAttribute("fill", "none");
+  tip.style.cssText = "display:block;margin-top:-1px;";
+  const poly = document.createElementNS(SVG_NS, "polygon");
+  poly.setAttribute("points", "8,11 0,0 16,0");
+  poly.setAttribute("fill", colors.bg);
+  tip.appendChild(poly);
+  wrapper.appendChild(tip);
+
+  return wrapper;
 }
 
 const LAYER_CONFIG: Record<string, LayerConfig> = {
@@ -150,13 +226,6 @@ export default function Map({
     () => buildTileUrl(mapType, API_KEY, timeOffsetMinutes),
     [mapType, timeOffsetMinutes],
   );
-  const tileRef = useRef<L.TileLayer | null>(null);
-
-  useEffect(() => {
-    if (!tileRef.current) return;
-
-    tileRef.current.setUrl(tileUrl);
-  }, [tileUrl]);
 
   return (
     <MapContainer
@@ -224,37 +293,54 @@ function CustomMarker({
   const { units } = useUnits();
   const { t } = useTranslation();
 
-  // Reverse-geocode when user dropped a pin — same key as WeatherOverlay → cache hit.
+  // ── Step 2: stable query keys via rounded coords (set upstream in useWeatherApp)
+  // placeholderData keeps the previous result visible while a new fetch runs,
+  // preventing the marker from flickering to "–" during refetches.
   const { data: pinnedCity } = useQuery({
     queryKey: ["reverseGeocode", coords.lat, coords.lon],
     queryFn: () => reverseGeocode(coords.lat, coords.lon),
     enabled: selectedCity === null,
     staleTime: Infinity,
+    placeholderData: keepPreviousData,
   });
 
   const { data } = useQuery({
     queryKey: ["weather", coords.lat, coords.lon, units],
     queryFn: () => getWeather({ lat: coords.lat, lon: coords.lon, units }),
+    staleTime: 5 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 
-  // For precipitation the actual rain/snow volume is only in hourly data.
+  // ── Step 1: memoize all derived values so the icon is only rebuilt when
+  // something actually changed, not on every parent render.
+
   const display = useMemo(() => {
     if (!data) return null;
-
-    return data
-      ? mapType === "precipitation_new" &&
-        timeOffsetMinutes <= 0 &&
-        data.hourly.length > 0
-        ? data.hourly[0]
-        : pickDisplayData(data, timeOffsetMinutes)
-      : null;
+    return mapType === "precipitation_new" &&
+      timeOffsetMinutes <= 0 &&
+      data.hourly.length > 0
+      ? data.hourly[0]
+      : pickDisplayData(data, timeOffsetMinutes);
   }, [data, mapType, timeOffsetMinutes]);
 
-  const cfg = LAYER_CONFIG[mapType] ?? FALLBACK_CONFIG;
-  const value = display ? cfg.getValue(display, units) : "–";
-  const colors = display
-    ? cfg.getColors(display, units)
-    : { bg: "#6b7280", glow: "rgba(107,114,128,0.4)" };
+  // cfg is stable per mapType — avoids getValue/getColors closure churn
+  const cfg = useMemo(
+    () => LAYER_CONFIG[mapType] ?? FALLBACK_CONFIG,
+    [mapType],
+  );
+
+  const value = useMemo(
+    () => (display ? cfg.getValue(display, units) : "–"),
+    [display, cfg, units],
+  );
+
+  const colors = useMemo(
+    () =>
+      display
+        ? cfg.getColors(display, units)
+        : { bg: "#6b7280", glow: "rgba(107,114,128,0.4)" },
+    [display, cfg, units],
+  );
 
   const locationLabel = useMemo(() => {
     if (selectedCity) return `${selectedCity.name}, ${selectedCity.country}`;
@@ -262,51 +348,19 @@ function CustomMarker({
     return "";
   }, [selectedCity, pinnedCity]);
 
-  // 120 px fits "101325 Pa" (pressure in Pa is the widest label) plus the icon.
-  // Name label has min-height:16px so the anchor stays at a fixed 58 px from
-  // the top regardless of whether the name has resolved yet.
-  const iconHtml = `
-    <div style="
-      display:flex;flex-direction:column;align-items:center;width:120px;
-      filter:drop-shadow(0 4px 14px ${colors.glow});
-    ">
-      <div style="
-        width:100px;
-        flex-direction: column;
-        display:flex;align-items:center;justify-content:center;gap:5px;
-        background:${colors.bg};
-        color:#E8E8E8;
-        font-weight:700;font-size:13px;
-        font-family:ui-sans-serif,system-ui,sans-serif;
-        line-height:1.2;padding:5px 0;
-        border-radius:10px;
-        border:1.5px solid rgba(255,255,255,0.22);
-        box-shadow:0 2px 6px rgba(0,0,0,0.28);
-      ">
-        ${locationLabel ? `<span style="color:rgba(255,255,255,0.85);font-size:11px;font-weight:600;max-width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${locationLabel}</span>` : ""}
-        <div style="display:flex;align-items:center;justify-content:center;gap:5px;">
-          ${mkIcon(cfg.iconPaths)}
-          <span>${value}</span>
-        </div>
-      </div>
-      <svg width="16" height="11" viewBox="0 0 16 11" fill="none"
-           xmlns="http://www.w3.org/2000/svg"
-           style="display:block;margin-top:-1px;">
-        <polygon points="8,11 0,0 16,0" fill="${colors.bg}"/>
-      </svg>
-    </div>
-  `;
-
-  // Total height: name(16) + gap(3) + pill(~28) + triangle(11) = 58 px
+  // ── Step 4: build the icon from real DOM nodes instead of an HTML string.
+  // L.divIcon accepts HTMLElement directly; no innerHTML concatenation in the
+  // render path. The useMemo ensures we only create a new DOM tree + DivIcon
+  // instance when one of the stable memoized values above actually changed.
   const icon = useMemo(
     () =>
       L.divIcon({
-        html: iconHtml,
+        html: createMarkerNode(colors, cfg.iconPaths, value, locationLabel),
         className: "weather-marker-icon",
         iconSize: [120, 58],
         iconAnchor: [60, 58],
       }),
-    [iconHtml],
+    [colors, cfg, value, locationLabel],
   );
 
   return (
@@ -382,7 +436,7 @@ const MapController = ({
 }) => {
   const map = useMap();
   const handleClick = useCallback(
-    (e) => {
+    (e: { latlng: { lat: number; lng: number } }) => {
       onMapClick(e.latlng.lat, e.latlng.lng);
     },
     [onMapClick],
@@ -443,31 +497,43 @@ function WeatherWebGLLayer({ url }: { url: string }) {
   const map = useMap();
   const layerRef = useRef<WeatherLayer | null>(null);
 
-  const buildLayer = (url: string) =>
-    new (WebGLWeatherLayer as new (...args: object[]) => object)({
+  useEffect(() => {
+    // Remove any previous instance first so we never have two layers stacked.
+    if (layerRef.current) {
+      try {
+        layerRef.current.remove();
+      } catch {
+        // already removed (e.g. StrictMode double-effect)
+      }
+      layerRef.current = null;
+    }
+
+    // Build a fresh layer with a closure over the current URL.
+    // This guarantees every tile in the new layer uses the exact URL that was
+    // current when the effect fired — no stale-closure or _tiles-cache issues.
+    const resolvedUrl = url; // capture for closure
+    layerRef.current = new (WebGLWeatherLayer as new (
+      ...args: object[]
+    ) => object)({
       tileSize: 256,
       opacity: 0.75,
       getTileUrl: (coords: { x: number; y: number; z: number }) =>
-        url
+        resolvedUrl
           .replace("{z}", String(coords.z))
           .replace("{x}", String(coords.x))
           .replace("{y}", String(coords.y)),
     }) as WeatherLayer;
 
-  useEffect(() => {
-    if (!map) return;
-
-    // first mount
-    if (!layerRef.current) {
-      layerRef.current = buildLayer(url);
-      layerRef.current.addTo(map);
-      return;
-    }
-
-    // full refresh on change (fixes stale tiles)
-    layerRef.current.remove();
-    layerRef.current = buildLayer(url);
     layerRef.current.addTo(map);
+
+    return () => {
+      try {
+        layerRef.current?.remove();
+        layerRef.current = null;
+      } catch {
+        // Map already torn down (StrictMode double-effect / unmount race)
+      }
+    };
   }, [map, url]);
 
   return null;
