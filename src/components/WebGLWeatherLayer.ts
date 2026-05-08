@@ -13,10 +13,17 @@ export type WeatherLayerOptions = L.GridLayerOptions & {
 export type WeatherLayer = L.GridLayer & {
   options: WeatherLayerOptions;
   redraw: () => void;
+  setTileUrl: (getTileUrl: (coords: WeatherTileCoords) => string) => void;
 };
 
+const worker = new Worker(new URL("../weatherTile.worker", import.meta.url), {
+  type: "module",
+});
+
+let requestId = 0;
+
 export const WebGLWeatherLayer = L.GridLayer.extend({
-  createTile(this: WeatherLayer, coords: WeatherTileCoords) {
+  createTile(this: WeatherLayer, coords) {
     const tile = document.createElement("canvas");
     const ctx = tile.getContext("2d")!;
 
@@ -26,26 +33,29 @@ export const WebGLWeatherLayer = L.GridLayer.extend({
 
     const url = this.options.getTileUrl(coords);
 
-    const img = new Image();
-    let alpha = 0;
+    const id = requestId++;
 
-    img.onload = () => {
-      const draw = () => {
-        ctx.clearRect(0, 0, size.x, size.y);
+    worker.postMessage({
+      id,
+      url,
+      width: size.x,
+      height: size.y,
+      coords,
+    });
 
-        ctx.globalAlpha = alpha;
-        ctx.drawImage(img, 0, 0, size.x, size.y);
+    const handler = (e: MessageEvent) => {
+      const { bitmap, id: resId } = e.data;
 
-        if (alpha < 1) {
-          alpha += 0.1;
-          requestAnimationFrame(draw);
-        }
-      };
+      // ignore old/outdated responses
+      if (resId !== id) return;
 
-      draw();
+      ctx.clearRect(0, 0, size.x, size.y);
+      ctx.drawImage(bitmap, 0, 0);
+
+      worker.removeEventListener("message", handler);
     };
 
-    img.src = url;
+    worker.addEventListener("message", handler);
 
     return tile;
   },

@@ -19,7 +19,11 @@ import { formatTemp, formatWindSpeed } from "../lib/format";
 import type { CityResult } from "../types";
 import type { Units } from "../context/units-context";
 import { useTranslation } from "react-i18next";
-import { WebGLWeatherLayer, type WeatherLayer } from "./WebGLWeatherLayer";
+import {
+  WebGLWeatherLayer,
+  type WeatherLayer,
+  type WeatherTileCoords,
+} from "./WebGLWeatherLayer";
 
 const API_KEY = import.meta.env.VITE_API_KEY;
 
@@ -231,13 +235,18 @@ export default function Map({
   return (
     <MapContainer
       center={[lat, lon]}
-      zoomControl={false}
+      inertia
+      touchZoom
       preferCanvas
+      markerZoomAnimation
+      zoomControl={false}
       zoom={6}
       minZoom={2}
       maxZoom={12}
       zoomSnap={0.5}
       zoomDelta={1}
+      inertiaDeceleration={3000}
+      easeLinearity={0.1}
       style={{ width: "100%", height: "100vh" }}
     >
       <MapController onMapClick={onMapClick} coords={coords} />
@@ -404,7 +413,10 @@ function CustomMarker({
                   <path d="M12 19V5" />
                   <path d="m5 12 7-7 7 7" />
                 </svg>
-                {formatWindSpeed(omWind?.wind_speed ?? display.wind_speed, units)}
+                {formatWindSpeed(
+                  omWind?.wind_speed ?? display.wind_speed,
+                  units,
+                )}
               </span>
             </div>
             <div className="wmt-row">
@@ -499,44 +511,31 @@ function MapTileLayer() {
 
 function WeatherWebGLLayer({ url }: { url: string }) {
   const map = useMap();
-  const layerRef = useRef<WeatherLayer | null>(null);
+  const layerRef = useRef<L.GridLayer | null>(null);
 
   useEffect(() => {
-    // Remove any previous instance first so we never have two layers stacked.
-    if (layerRef.current) {
-      try {
-        layerRef.current.remove();
-      } catch {
-        // already removed (e.g. StrictMode double-effect)
-      }
-      layerRef.current = null;
-    }
+    // remove old layer immediately
+    layerRef.current?.remove();
 
-    // Build a fresh layer with a closure over the current URL.
-    // This guarantees every tile in the new layer uses the exact URL that was
-    // current when the effect fired — no stale-closure or _tiles-cache issues.
-    const resolvedUrl = url; // capture for closure
-    layerRef.current = new (WebGLWeatherLayer as new (
+    const layer = new (WebGLWeatherLayer as new (
       ...args: object[]
-    ) => object)({
+    ) => WeatherLayer)({
       tileSize: 256,
-      opacity: 0.75,
-      getTileUrl: (coords: { x: number; y: number; z: number }) =>
-        resolvedUrl
+      opacity: 0.7,
+      keepBuffer: 2,
+      updateWhenZooming: true,
+      getTileUrl: (coords: WeatherTileCoords) =>
+        url
           .replace("{z}", String(coords.z))
           .replace("{x}", String(coords.x))
           .replace("{y}", String(coords.y)),
-    }) as WeatherLayer;
+    });
 
-    layerRef.current.addTo(map);
+    layer.addTo(map);
+    layerRef.current = layer;
 
     return () => {
-      try {
-        layerRef.current?.remove();
-        layerRef.current = null;
-      } catch {
-        // Map already torn down (StrictMode double-effect / unmount race)
-      }
+      layer.remove();
     };
   }, [map, url]);
 

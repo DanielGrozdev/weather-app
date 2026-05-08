@@ -161,7 +161,7 @@ export function WindParticlesLayer({
       const ctx = canvas.getContext("2d");
       if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
-  }, [coords?.lat, coords?.lon, map]);
+  }, [coords, coords.lat, coords.lon, map]);
 
   // ── Render loop — only restarted when enabled/map changes ────────────────
 
