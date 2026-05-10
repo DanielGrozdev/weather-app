@@ -1,26 +1,30 @@
 /**
  * WindParticlesLayer — vector-field particle visualisation
  *
- * Grid source : Open-Meteo (free, no key) — 3×3 points centered on coords
+ * Grid source : Open-Meteo ECMWF IFS 0.25° — 8×8 points, city-centred, fetched ONCE per session
  * Interpolation: bilinear from the 4 surrounding grid cells
  * Particles    : PARTICLE_COUNT points in geographic (lat/lon) space
  * Render loop  : rAF canvas overlay, z-index 450 on the Leaflet container
  *
- * Consistency guarantee:
- *   coordsBoundsFor() places the center grid cell at exactly (coords.lat, lon).
- *   sampleGrid at that point returns the raw Open-Meteo value — the same number
- *   shown by useWindAtPoint in the overlay.  Both consumers share the React Query
- *   cache entry ["windGrid", minLat, maxLat, minLon, maxLon].
+ * Why the grid is city-keyed (not viewport-keyed):
+ *   Viewport bounds change with every zoom / pan → new React Query key →
+ *   new fetch → direction appears to shift.  By snapping `coords` to the
+ *   nearest 5° and building a fixed ±30° / ±35° box around that point, the
+ *   same grid covers every zoom level.  staleTime: Infinity means the data
+ *   is fetched exactly once per session per 5°-zone and reused forever.
+ *
+ *   The fetch is gated behind `enabled` so no network request is made when
+ *   the wind layer is toggled off.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useMap, useMapEvents } from "react-leaflet";
+import { useEffect, useRef } from "react";
+import { useMap } from "react-leaflet";
 import { useQuery } from "@tanstack/react-query";
 import {
-  coordsBoundsFor,
+  cityBoundsFor,
+  citySnapFor,
   fetchWindGrid,
   sampleGrid,
-  stableBounds,
   type BoundsRect,
   type WindGrid,
 } from "../lib/windGrid";
@@ -39,7 +43,7 @@ type Particle = {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const PARTICLE_COUNT = 1400;
+const PARTICLE_COUNT = 1000;
 
 /**
  * Simulation seconds per animation frame at BASE_ZOOM.
@@ -49,9 +53,42 @@ const DT_BASE = 300;
 const BASE_ZOOM = 6;
 const MARGIN_PX = 60;
 
-// ─── Map bounds helper ────────────────────────────────────────────────────────
+// ─── Windy-inspired speed colormap ───────────────────────────────────────────
 
-function getMapBounds(map: L.Map): BoundsRect {
+/**
+ * Maps wind speed (m/s) to an RGB colour matching Windy.com's velocity palette:
+ *   calm  →  soft blue  →  teal  →  green  →  yellow  →  orange  →  red (storm)
+ *
+ * Uses linear interpolation between fixed stops so the transition is smooth.
+ * The colour is sampled every frame per particle, so it must be cheap.
+ */
+const COLOR_STOPS: [number, number, number, number][] = [
+  //  m/s   R    G    B
+  [  0,  50, 136, 189 ],  // calm       — #3288bd
+  [  5, 102, 194, 165 ],  // light      — #66c2a5
+  [ 10, 171, 221, 164 ],  // moderate   — #abdda4
+  [ 15, 230, 245, 152 ],  // fresh      — #e6f598
+  [ 20, 254, 224, 139 ],  // strong     — #fee08b
+  [ 25, 253, 174,  97 ],  // gale       — #fdae61
+  [ 30, 213,  62,  79 ],  // storm      — #d53e4f
+];
+
+function windSpeedColor(spd: number): string {
+  const s = Math.max(0, Math.min(30, spd));
+  for (let i = 0; i < COLOR_STOPS.length - 1; i++) {
+    const [s0, r0, g0, b0] = COLOR_STOPS[i];
+    const [s1, r1, g1, b1] = COLOR_STOPS[i + 1];
+    if (s <= s1) {
+      const t = (s - s0) / (s1 - s0);
+      return `rgb(${Math.round(r0 + t * (r1 - r0))},${Math.round(g0 + t * (g1 - g0))},${Math.round(b0 + t * (b1 - b0))})`;
+    }
+  }
+  return `rgb(213,62,79)`;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function getViewportBounds(map: L.Map): BoundsRect {
   const b = map.getBounds();
   return {
     minLat: b.getSouth(),
@@ -60,8 +97,6 @@ function getMapBounds(map: L.Map): BoundsRect {
     maxLon: b.getEast(),
   };
 }
-
-// ─── Particle factory ─────────────────────────────────────────────────────────
 
 function spawnParticle(b: BoundsRect, preAge = false): Particle {
   const lat = b.minLat + Math.random() * (b.maxLat - b.minLat);
@@ -91,79 +126,54 @@ export function WindParticlesLayer({
 }) {
   const map = useMap();
 
-  // ── Grid fetching ─────────────────────────────────────────────────────────
+  // ── Grid fetch — city-keyed, once per session ────────────────────────────
 
-  /**
-   * coordsBoundsFor keeps the center cell at exactly (coords.lat, coords.lon)
-   * — no stableBounds shift.  Coords is already rounded to 2 dp upstream so
-   * the query key is naturally stable without extra snapping.
-   */
-  const coordsBounds = useMemo<BoundsRect | null>(
-    () => (coords ? coordsBoundsFor(coords.lat, coords.lon) : null),
-    [coords?.lat, coords?.lon],
-  );
-
-  /** Map-viewport bounds — only updated from event handlers (no setState in effects). */
-  const [mapBounds, setMapBounds] = useState<BoundsRect>(() =>
-    stableBounds(getMapBounds(map)),
-  );
-
-  useMapEvents({
-    moveend: () => setMapBounds(stableBounds(getMapBounds(map))),
-    zoomend: () => setMapBounds(stableBounds(getMapBounds(map))),
-  });
-
-  // coordsBounds wins so the center cell matches coords exactly.
-  // mapBounds covers the particle field when the user pans away.
-  const activeBounds = coordsBounds ?? mapBounds;
+  const snap = coords ? citySnapFor(coords.lat, coords.lon) : null;
+  const bounds = snap ? cityBoundsFor(snap.lat, snap.lon) : null;
 
   const { data: grid } = useQuery({
-    queryKey: [
-      "windGrid",
-      activeBounds.minLat,
-      activeBounds.maxLat,
-      activeBounds.minLon,
-      activeBounds.maxLon,
-    ],
-    queryFn: () => fetchWindGrid(activeBounds),
-    staleTime: 10 * 60 * 1000,
-    enabled: !!enabled,
+    queryKey: snap
+      ? ["windGrid", snap.lat, snap.lon]
+      : ["windGrid", "disabled"],
+    queryFn: () => fetchWindGrid(bounds!),
+    staleTime: Infinity, // never re-fetch during the session
+    gcTime: Infinity, // keep in memory as long as the tab is open
+    enabled: !!enabled && !!snap,
   });
 
-  // Swap the grid reference without restarting the render loop so particles
-  // continue uninterrupted while new data loads.
+  // Hold the latest grid in a ref so the rAF loop sees it without restarting.
   const gridRef = useRef<WindGrid | null>(null);
   useEffect(() => {
     if (grid) gridRef.current = grid;
   }, [grid]);
 
-  // ── Refs shared between the flush effect and the render loop ──────────────
+  // ── Particle arrays and canvas ref ───────────────────────────────────────
 
   const particlesRef = useRef<Particle[]>([]);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   /**
-   * When coords change (new city / map click):
-   *   - Immediately respawn all particles in the current viewport at age=0 so
-   *     they fade in at the new location.  We deliberately keep the old grid
-   *     so particles start moving right away (slightly wrong direction for ~0.5s)
-   *     rather than freezing until the new grid arrives.
-   *   - Clear the canvas so stale trails from the previous location vanish instantly.
+   * When the selected city changes: clear stale trails and respawn particles
+   * across the current viewport so they immediately flow in the new region's
+   * direction.  The old grid is kept alive so particles don't freeze while the
+   * new fetch resolves.
    */
   useEffect(() => {
     if (!coords) return;
-    const visB = getMapBounds(map);
+    const vp = getViewportBounds(map);
     particlesRef.current = Array.from({ length: PARTICLE_COUNT }, () =>
-      spawnParticle(visB, false),
+      spawnParticle(vp, false),
     );
     const canvas = canvasRef.current;
     if (canvas) {
       const ctx = canvas.getContext("2d");
-      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx?.clearRect(0, 0, canvas.width, canvas.height);
     }
-  }, [coords, coords.lat, coords.lon, map]);
+  }, [coords?.lat, coords?.lon, map]);
 
-  // ── Render loop — only restarted when enabled/map changes ────────────────
+  // ── Render loop ───────────────────────────────────────────────────────────
+  // Restarted only when `enabled` or `map` changes — NOT on grid or coord
+  // changes — so the animation is never interrupted by data updates.
 
   useEffect(() => {
     if (!enabled) return;
@@ -184,20 +194,18 @@ export function WindParticlesLayer({
 
     const ctx = canvas.getContext("2d")!;
 
-    // Seed on first mount (pre-aged so the field looks full immediately).
     if (particlesRef.current.length === 0) {
-      const initB = getMapBounds(map);
+      const vp = getViewportBounds(map);
       particlesRef.current = Array.from({ length: PARTICLE_COUNT }, () =>
-        spawnParticle(initB, true),
+        spawnParticle(vp, true),
       );
     }
 
     const raf = { id: 0 };
 
     const render = () => {
-      // Long dreamy trails: erase only 4% of canvas alpha per frame.
       ctx.globalCompositeOperation = "destination-out";
-      ctx.fillStyle = "rgba(0,0,0,0.04)";
+      ctx.fillStyle = "rgba(0,0,0,0.02)";
       ctx.fillRect(0, 0, W, H);
       ctx.globalCompositeOperation = "source-over";
 
@@ -209,12 +217,11 @@ export function WindParticlesLayer({
 
       const zoom = map.getZoom();
       const dt = DT_BASE / Math.pow(2, zoom - BASE_ZOOM);
-      const visB = getMapBounds(map);
+      const vp = getViewportBounds(map);
 
-      // Re-seed (shouldn't normally be empty here, but guards against races).
       if (particlesRef.current.length === 0) {
         particlesRef.current = Array.from({ length: PARTICLE_COUNT }, () =>
-          spawnParticle(visB, true),
+          spawnParticle(vp, true),
         );
       }
 
@@ -224,7 +231,7 @@ export function WindParticlesLayer({
         const t = p.age / p.maxAge;
         const alpha = t < 0.12 ? t / 0.12 : t > 0.72 ? (1 - t) / 0.28 : 1;
         if (alpha <= 0) {
-          Object.assign(p, spawnParticle(visB));
+          Object.assign(p, spawnParticle(vp));
           continue;
         }
 
@@ -240,14 +247,10 @@ export function WindParticlesLayer({
         const { u, v } = sampleGrid(g, p.lat, p.lon);
         const spd = Math.hypot(u, v);
 
-        const ratio = Math.min(spd / 15, 1);
-        const rCh = Math.round(110 + ratio * 145);
-        const gCh = Math.round(160 + ratio * 95);
-
         ctx.save();
-        ctx.globalAlpha = alpha * 0.65;
-        ctx.strokeStyle = `rgb(${rCh},${gCh},255)`;
-        ctx.lineWidth = 0.75 + ratio * 0.75;
+        ctx.globalAlpha = alpha * 0.75;
+        ctx.strokeStyle = windSpeedColor(spd);
+        ctx.lineWidth = 1.0 + Math.min(spd / 15, 1) * 1.0;
         ctx.lineCap = "round";
         ctx.beginPath();
         ctx.moveTo(prev.x, prev.y);
@@ -268,7 +271,7 @@ export function WindParticlesLayer({
           cur.y < -MARGIN_PX ||
           cur.y > H + MARGIN_PX
         ) {
-          Object.assign(p, spawnParticle(visB));
+          Object.assign(p, spawnParticle(vp));
         }
       }
 

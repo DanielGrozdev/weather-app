@@ -125,7 +125,7 @@ function App() {
           timeOffsetMinutes={timeOffsetMinutes}
           selectedCity={selectedCity}
         />
-        {overlaysVisible ? <Legend config={config} /> : null}
+        {overlaysVisible ? <Legend config={config} mapType={mapType} /> : null}
       </div>
 
       {/* <HourlyForecast coords={coords} />

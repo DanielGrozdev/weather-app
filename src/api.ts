@@ -9,24 +9,7 @@ import type { Units } from "./context/units-context";
  * straight into formatWindSpeed without further conversion.
  * wind_deg is the meteorological FROM-direction (0 = wind coming from north).
  */
-export async function getOpenMeteoWind(
-  lat: number,
-  lon: number,
-  units: Units,
-): Promise<{ wind_speed: number; wind_deg: number }> {
-  const windUnit = units === "imperial" ? "mph" : "ms";
-  const url =
-    `https://api.open-meteo.com/v1/forecast` +
-    `?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}` +
-    `&current=wind_speed_10m,wind_direction_10m&wind_speed_unit=${windUnit}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Open-Meteo wind fetch failed (${res.status})`);
-  const d = await res.json();
-  return {
-    wind_speed: d.current?.wind_speed_10m ?? 0,
-    wind_deg: d.current?.wind_direction_10m ?? 0,
-  };
-}
+
 import { GeocodeSchema } from "./schemas/geocodeSchema";
 import { weatherSchema } from "./schemas/weatherSchema";
 import { cityKey, type CityResult } from "./types";
@@ -46,7 +29,6 @@ export async function getWeather({
     `https://api.openweathermap.org/data/3.0/onecall?lat=${lat}&lon=${lon}&units=${units}&exclude=minutely,alerts&appid=${API_KEY}`,
   );
   const data = await res.json();
-
   return weatherSchema.parse(data);
 }
 
@@ -118,5 +100,24 @@ export async function reverseGeocode(
     state: item.state,
     lat: item.lat,
     lon: item.lon,
+  };
+}
+
+export async function getOpenMeteoWind(
+  lat: number,
+  lon: number,
+  units: Units,
+): Promise<{ wind_speed: number; wind_deg: number }> {
+  const windUnit = units === "imperial" ? "mph" : "ms";
+  const url =
+    `https://api.open-meteo.com/v1/forecast` +
+    `?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}` +
+    `&current=wind_speed_10m,wind_direction_10m&wind_speed_unit=${windUnit}&models=ecmwf_ifs025`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Open-Meteo wind fetch failed (${res.status})`);
+  const d = await res.json();
+  return {
+    wind_speed: d.current?.wind_speed_10m ?? 0,
+    wind_deg: d.current?.wind_direction_10m ?? 0,
   };
 }

@@ -1,10 +1,4 @@
-import {
-  MapContainer,
-  Marker,
-  Tooltip,
-  useMap,
-  useMapEvents,
-} from "react-leaflet";
+import { MapContainer, Marker, useMap, useMapEvents } from "react-leaflet";
 import { MaptilerLayer, MapStyle } from "@maptiler/leaflet-maptilersdk";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -13,12 +7,10 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { WindParticlesLayer } from "./WindParticles";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { getWeather, reverseGeocode } from "../api";
-import { useWindAtPoint } from "../hooks/useWindAtPoint";
 import { useUnits } from "../hooks/useUnits";
 import { formatTemp, formatWindSpeed } from "../lib/format";
 import type { CityResult } from "../types";
 import type { Units } from "../context/units-context";
-import { useTranslation } from "react-i18next";
 import {
   WebGLWeatherLayer,
   type WeatherLayer,
@@ -26,13 +18,8 @@ import {
 } from "./WebGLWeatherLayer";
 
 const API_KEY = import.meta.env.VITE_API_KEY;
-
-// MapTiler basemap — dark style that matches the app's atmospheric, Windy-like
-// inspiration. The MaptilerLayer accepts a `MapStyleVariant` object from the
-// SDK's `MapStyle` enum; raw strings like "streets-v2-dark" are not recognized
-// and the SDK falls back to the deprecated "Streets Default v2".
-const MAPTILER_STYLE = MapStyle.STREETS.NIGHT;
-const MAPTILER_API_KEY = "QRLg65UXd2y9kR0eA8d8";
+const MAPTILER_API_KEY = import.meta.env.VITE_MAP_TILER_KEY;
+const MAPTILER_STYLE = MapStyle.BACKDROP.DARK;
 
 type Props = {
   coords: Coords;
@@ -102,7 +89,9 @@ function createMarkerNode(
   const wrapper = document.createElement("div");
   wrapper.style.cssText =
     `display:flex;flex-direction:column;align-items:center;width:120px;` +
-    `filter:drop-shadow(0 4px 14px ${colors.glow});`;
+    `filter:drop-shadow(0 4px 14px ${colors.glow});` +
+    `z-index:500;` +
+    `pointer-events:none;`;
 
   // Pill
   const pill = document.createElement("div");
@@ -167,19 +156,29 @@ const LAYER_CONFIG: Record<string, LayerConfig> = {
       '<path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>',
   },
   pressure_new: {
-    // OWM returns hPa; multiply by 100 → Pa (range 90000–104000 Pa)
-    getValue: (d) => `${Math.round(d.pressure * 100)} Pa`,
-    getColors: () => ({ bg: "#0369a1", glow: "rgba(3,105,161,0.55)" }),
+    // OWM returns hPa. Legend: 900–1040 hPa (blue → cyan → green → yellow → orange → red)
+    getValue: (d) => `${Math.round(d.pressure)} hPa`,
+    getColors: (d) => {
+      const p = d.pressure; // hPa
+      if (p < 960) return { bg: "#0073ff", glow: "rgba(0,115,255,0.55)" }; // very low — deep blue
+      if (p < 985) return { bg: "#4bd0d6", glow: "rgba(75,208,214,0.55)" }; // low — cyan
+      if (p < 1000) return { bg: "#8de7c7", glow: "rgba(141,231,199,0.55)" }; // below normal — teal
+      if (p < 1015) return { bg: "#f0b800", glow: "rgba(240,184,0,0.55)" }; // normal — yellow
+      if (p < 1025) return { bg: "#fb5515", glow: "rgba(251,85,21,0.55)" }; // high — orange
+      return { bg: "#c60000", glow: "rgba(198,0,0,0.55)" }; // very high — red
+    },
     iconPaths: '<path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/>',
   },
   wind_new: {
     getValue: (d, units) => formatWindSpeed(d.wind_speed, units),
-    getColors: (d) => {
-      const s = d.wind_speed; // m/s (metric) or mph
-      if (s <= 3) return { bg: "#5b21b6", glow: "rgba(91,33,182,0.55)" };
-      if (s <= 8) return { bg: "#4c1d95", glow: "rgba(76,29,149,0.55)" };
-      if (s <= 15) return { bg: "#3b0764", glow: "rgba(59,7,100,0.55)" };
-      return { bg: "#1e1b4b", glow: "rgba(30,27,75,0.55)" };
+    getColors: (d, units) => {
+      // Normalise to m/s so colour scale matches legend (0–29 m/s, light→dark purple)
+      const ms = units === "imperial" ? d.wind_speed / 2.237 : d.wind_speed;
+      if (ms < 2) return { bg: "#b478c8", glow: "rgba(180,120,200,0.55)" }; // calm — light purple
+      if (ms < 7) return { bg: "#7850a0", glow: "rgba(120,80,160,0.55)" }; // light — purple
+      if (ms < 14) return { bg: "#462878", glow: "rgba(70,40,120,0.55)" }; // moderate — dark purple
+      if (ms < 21) return { bg: "#1e1450", glow: "rgba(30,20,80,0.55)" }; // strong — very dark
+      return { bg: "#0a0a28", glow: "rgba(10,10,40,0.55)" }; // gale — near-black
     },
     iconPaths:
       '<path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2"/>' +
@@ -187,19 +186,33 @@ const LAYER_CONFIG: Record<string, LayerConfig> = {
       '<path d="M12.6 19.4A2 2 0 1 0 14 16H2"/>',
   },
   precipitation_new: {
-    // Show actual rain/snow volume in mm/h; 0.0 when no precipitation expected
+    // Legend: 0–40 mm/h (transparent → gray-blue → blue)
     getValue: (d) => {
       const mm = (d.rain?.["1h"] ?? 0) + (d.snow?.["1h"] ?? 0);
       return `${mm.toFixed(1)} mm/h`;
     },
-    getColors: () => ({ bg: "#1d4ed8", glow: "rgba(29,78,216,0.55)" }),
+    getColors: (d) => {
+      const mm = (d.rain?.["1h"] ?? 0) + (d.snow?.["1h"] ?? 0);
+      if (mm === 0) return { bg: "#4b5563", glow: "rgba(75,85,99,0.45)" }; // dry — neutral grey
+      if (mm < 0.5) return { bg: "#9696aa", glow: "rgba(150,150,170,0.55)" }; // trace — grey-blue
+      if (mm < 3) return { bg: "#7878be", glow: "rgba(120,120,190,0.55)" }; // light — purple-blue
+      if (mm < 8) return { bg: "#5a5ad2", glow: "rgba(90,90,210,0.55)" }; // moderate — blue
+      if (mm < 20) return { bg: "#3c3ce6", glow: "rgba(60,60,230,0.55)" }; // heavy — deep blue
+      return { bg: "#1414ff", glow: "rgba(20,20,255,0.55)" }; // extreme — intense blue
+    },
     iconPaths:
       '<path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/>' +
       '<path d="M16 14v6"/><path d="M8 14v6"/><path d="M12 16v6"/>',
   },
   clouds_new: {
     getValue: (d) => `${Math.round(d.clouds)} %`,
-    getColors: () => ({ bg: "#374151", glow: "rgba(55,65,81,0.55)" }),
+    getColors: (d) => {
+      const c = d.clouds; // 0–100 %
+      if (c < 20) return { bg: "#374151", glow: "rgba(55,65,81,0.4)" }; // clear
+      if (c < 50) return { bg: "#4b5563", glow: "rgba(75,85,99,0.45)" }; // partly cloudy
+      if (c < 80) return { bg: "#6b7280", glow: "rgba(107,114,128,0.5)" }; // mostly cloudy
+      return { bg: "#9ca3af", glow: "rgba(156,163,175,0.55)" }; // overcast
+    },
     iconPaths:
       '<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>',
   },
@@ -242,8 +255,8 @@ export default function Map({
       zoomControl={false}
       zoom={6}
       minZoom={2}
-      maxZoom={12}
-      zoomSnap={0.5}
+      maxZoom={15}
+      zoomSnap={1}
       zoomDelta={1}
       inertiaDeceleration={3000}
       easeLinearity={0.1}
@@ -252,7 +265,7 @@ export default function Map({
       <MapController onMapClick={onMapClick} coords={coords} />
       <WindParticlesLayer enabled={windParticlesEnabled} coords={coords} />
       <MapTileLayer />
-      <WeatherWebGLLayer url={tileUrl} />
+      <WeatherWebGLLayer url={tileUrl} mapType={mapType} />
       <CustomMarker
         coords={coords}
         mapType={mapType}
@@ -301,7 +314,6 @@ function CustomMarker({
   selectedCity: CityResult | null;
 }) {
   const { units } = useUnits();
-  const { t } = useTranslation();
 
   // ── Step 2: stable query keys via rounded coords (set upstream in useWeatherApp)
   // placeholderData keeps the previous result visible while a new fetch runs,
@@ -320,9 +332,6 @@ function CustomMarker({
     staleTime: 5 * 60 * 1000,
     placeholderData: keepPreviousData,
   });
-
-  // Same wind grid as WindParticlesLayer and WeatherOverlay — shared cache entry.
-  const omWind = useWindAtPoint(coords, units);
 
   // ── Step 1: memoize all derived values so the icon is only rebuilt when
   // something actually changed, not on every parent render.
@@ -376,58 +385,7 @@ function CustomMarker({
     [colors, cfg, value, locationLabel],
   );
 
-  return (
-    <Marker position={[coords.lat, coords.lon]} icon={icon}>
-      {display && (
-        <Tooltip
-          direction="right"
-          offset={[10, -18]}
-          opacity={1}
-          className="weather-marker-tooltip"
-        >
-          <div className="wmt-inner">
-            <div className="wmt-row">
-              <span>{t("tooltip.temperature")}</span>
-              <span>{formatTemp(display.temp, units)}</span>
-            </div>
-            <div className="wmt-row">
-              <span>{t("tooltip.windSpeed")}</span>
-              <span className="flex items-center gap-1.5">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  style={{
-                    transform: `rotate(${((omWind?.wind_deg ?? display.wind_deg) + 180) % 360}deg)`,
-                    display: "inline-block",
-                    flexShrink: 0,
-                    opacity: 0.75,
-                  }}
-                >
-                  <path d="M12 19V5" />
-                  <path d="m5 12 7-7 7 7" />
-                </svg>
-                {formatWindSpeed(
-                  omWind?.wind_speed ?? display.wind_speed,
-                  units,
-                )}
-              </span>
-            </div>
-            <div className="wmt-row">
-              <span>{t("tooltip.pressure")}</span>
-              <span>{Math.round(display.pressure)} hPa</span>
-            </div>
-          </div>
-        </Tooltip>
-      )}
-    </Marker>
-  );
+  return <Marker position={[coords.lat, coords.lon]} icon={icon} />;
 }
 
 // ─── MapController ────────────────────────────────────────────────────────────
@@ -509,22 +467,26 @@ function MapTileLayer() {
   return null;
 }
 
-function WeatherWebGLLayer({ url }: { url: string }) {
+function WeatherWebGLLayer({ url, mapType }: { url: string; mapType: string }) {
   const map = useMap();
-  const layerRef = useRef<L.GridLayer | null>(null);
+  const layerRef = useRef<WeatherLayer | null>(null);
 
+  // ── Create the layer once per map instance ────────────────────────────────
+  // Destroying and re-creating on every URL change throws away the entire tile
+  // cache and WebGL context. Instead we keep ONE persistent layer and update
+  // only its internal URL via setTileUrl().
   useEffect(() => {
-    // remove old layer immediately
-    layerRef.current?.remove();
-
     const layer = new (WebGLWeatherLayer as new (
       ...args: object[]
     ) => WeatherLayer)({
       tileSize: 256,
-      opacity: 0.7,
-      keepBuffer: 4,
-      updateWhenZooming: true,
-      updateWhenIdle: false,
+      opacity: 1,
+      updateWhenZooming: true, // Let tiles load DURING the zoom animation
+      updateWhenIdle: false, // Don't wait for the map to stop moving
+      keepBuffer: 4, // Keep more tiles off-screen to prevent white gaps
+      crossOrigin: true,
+      reuseTiles: true,
+      fadeAnimation: true,
       getTileUrl: (coords: WeatherTileCoords) =>
         url
           .replace("{z}", String(coords.z))
@@ -537,8 +499,23 @@ function WeatherWebGLLayer({ url }: { url: string }) {
 
     return () => {
       layer.remove();
+      layerRef.current = null;
     };
-  }, [map, url]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map]);
+
+  // ── Update the URL without re-creating the layer ──────────────────────────
+  useEffect(() => {
+    const layer = layerRef.current;
+    if (!layer) return;
+
+    layer.setTileUrl((coords: WeatherTileCoords) =>
+      url
+        .replace("{z}", String(coords.z))
+        .replace("{x}", String(coords.x))
+        .replace("{y}", String(coords.y)),
+    );
+  }, [url, mapType]);
 
   return null;
 }

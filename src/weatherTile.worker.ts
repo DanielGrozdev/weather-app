@@ -1,31 +1,36 @@
-const cache = new Map<string, ImageBitmap>();
+const cache = new Map();
 
 self.onmessage = async (e) => {
-  const { id, url, width, height } = e.data;
-
-  const cacheKey = url;
-
-  const canvas = new OffscreenCanvas(width, height);
-  const ctx = canvas.getContext("2d");
-
-  if (!ctx) return;
+  const { id, url } = e.data;
 
   try {
-    let img = cache.get(cacheKey);
+    let img = cache.get(url);
 
     if (!img) {
-      const res = await fetch(url);
+      const res = await fetch(url, { mode: "cors" });
+      if (!res.ok) throw new Error();
       const blob = await res.blob();
       img = await createImageBitmap(blob);
-      cache.set(cacheKey, img);
+
+      // Memory Management
+      if (cache.size > 200) {
+        const firstKey = cache.keys().next().value;
+        const oldImg = cache.get(firstKey);
+        if (oldImg) oldImg.close(); // Crucial: free GPU memory
+        cache.delete(firstKey);
+      }
+
+      cache.set(url, img);
     }
 
-    ctx.drawImage(img, 0, 0, width, height);
-
-    const bitmap = canvas.transferToImageBitmap();
-
-    self.postMessage({ id, bitmap });
+    /**
+     * We don't use 'transferables' here because we want to KEEP the
+     * image in the worker cache. If we transferred it, the worker
+     * would lose it. The browser will handle the copy efficiently.
+     */
+    self.postMessage({ id, bitmap: img });
   } catch (err) {
-    console.log(err);
+    console.error(err);
+    self.postMessage({ id, bitmap: null });
   }
 };

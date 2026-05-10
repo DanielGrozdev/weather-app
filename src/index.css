@@ -220,13 +220,6 @@
 .leaflet-control-attribution {
   display: none;
 }
-.leaflet-tile {
-  transition: opacity 200ms ease;
-}
-
-.leaflet-tile {
-  transition: opacity 180ms linear;
-}
 
 /* Inner content wrapper */
 .wmt-inner {

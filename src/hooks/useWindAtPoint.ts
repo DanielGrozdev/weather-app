@@ -1,18 +1,19 @@
 /**
- * useWindAtPoint — returns wind speed + FROM-direction for a single lat/lon
- * from the same Open-Meteo grid that WindParticlesLayer uses.
+ * useWindAtPoint — wind speed + FROM-direction for a single lat/lon.
  *
- * Key design: coordsBoundsFor(lat, lon) places the center grid point at
- * exactly (lat, lon), so sampleGrid at those coordinates returns the raw
- * Open-Meteo value — identical to what the particle at the selected marker
- * location is flowing with.  Both consumers share the React Query cache entry
- * ["windGrid", minLat, maxLat, minLon, maxLon] so only one network request
- * is ever made per location.
+ * Uses the same city-snapped React Query key as WindParticlesLayer:
+ *   ["windGrid", snappedLat, snappedLon]
+ *
+ * If the particle layer has already fetched the grid for this city zone,
+ * this hook reads straight from the React Query cache — zero extra requests.
+ * If particles are disabled (or this is the first consumer), a single 25-point
+ * batch fetch is made and cached for the entire session (staleTime: Infinity).
  */
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
-  coordsBoundsFor,
+  cityBoundsFor,
+  citySnapFor,
   fetchWindGrid,
   sampleGrid,
   uvToWind,
@@ -26,21 +27,17 @@ export function useWindAtPoint(
   units: Units,
   enabled = true,
 ): { wind_speed: number; wind_deg: number } | null {
-  const bounds = coords ? coordsBoundsFor(coords.lat, coords.lon) : null;
+  const snap   = coords ? citySnapFor(coords.lat, coords.lon) : null;
+  const bounds = snap   ? cityBoundsFor(snap.lat, snap.lon)  : null;
 
   const { data: grid } = useQuery({
-    queryKey: bounds
-      ? [
-          "windGrid",
-          bounds.minLat,
-          bounds.maxLat,
-          bounds.minLon,
-          bounds.maxLon,
-        ]
+    queryKey: snap
+      ? ["windGrid", snap.lat, snap.lon]
       : ["windGrid", "disabled"],
     queryFn: () => fetchWindGrid(bounds!),
-    staleTime: 10 * 60 * 1000,
-    enabled: !!bounds && enabled,
+    staleTime: Infinity,  // same key as WindParticlesLayer → reads from cache
+    gcTime: Infinity,
+    enabled: !!snap && enabled,
     placeholderData: keepPreviousData,
   });
 
