@@ -31,7 +31,9 @@
   "timeScrubber": {
     "label": "Времева лента",
     "stepBack": "Стъпка назад",
-    "stepForward": "Стъпка напред"
+    "stepForward": "Стъпка напред",
+    "play": "Пусни",
+    "pause": "Пауза"
   },
   "controls": {
     "hideOverlays": "Скрий слоевете",

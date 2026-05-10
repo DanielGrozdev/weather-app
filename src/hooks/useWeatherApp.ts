@@ -29,8 +29,6 @@ export function useWeatherApp() {
   const [cardsVisible, setCardsVisible] = useState(true);
   const [windParticlesEnabled, setWindParticlesEnabled] = useState(false);
   const [overlaysVisible, setOverlaysVisible] = useState(true);
-  // Placeholder for time-aware layers (e.g. tiles that support `time=` param).
-  const [timeOffsetMinutes, setTimeOffsetMinutes] = useState(0);
 
   const selectCity = useCallback((city: CityResult) => {
     setSelectedCity(city);
@@ -78,7 +76,5 @@ export function useWeatherApp() {
     overlaysVisible,
     setOverlaysVisible,
     toggleOverlays,
-    timeOffsetMinutes,
-    setTimeOffsetMinutes,
   };
 }

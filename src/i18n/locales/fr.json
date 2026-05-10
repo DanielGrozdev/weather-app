@@ -31,7 +31,9 @@
   "timeScrubber": {
     "label": "Curseur temporel",
     "stepBack": "Reculer",
-    "stepForward": "Avancer"
+    "stepForward": "Avancer",
+    "play": "Lecture",
+    "pause": "Pause"
   },
   "controls": {
     "hideOverlays": "Masquer les couches",

@@ -31,7 +31,9 @@
   "timeScrubber": {
     "label": "Time slider",
     "stepBack": "Step back",
-    "stepForward": "Step forward"
+    "stepForward": "Step forward",
+    "play": "Play",
+    "pause": "Pause"
   },
   "controls": {
     "hideOverlays": "Hide overlays",

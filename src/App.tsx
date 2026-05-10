@@ -7,7 +7,6 @@ import { useWeatherApp } from "./hooks/useWeatherApp";
 import Legend from "./components/Legend";
 import { legendConfigMap } from "./lib/consts";
 import WeatherOverlay from "./components/WeatherOverlay";
-import TimeScrubber from "./components/TimeScrubber";
 import { Eye, EyeOff } from "lucide-react";
 import { useMemo, useRef } from "react";
 import { useUnits } from "./hooks/useUnits";
@@ -27,8 +26,6 @@ function App() {
     setWindParticlesEnabled,
     overlaysVisible,
     toggleOverlays,
-    timeOffsetMinutes,
-    setTimeOffsetMinutes,
   } = useWeatherApp();
 
   const { units, toggle: toggleUnits } = useUnits();
@@ -106,14 +103,8 @@ function App() {
               <WeatherOverlay
                 coords={coords}
                 selectedCity={selectedCity}
-                timeOffsetMinutes={timeOffsetMinutes}
               />
             </div>
-            <TimeScrubber
-              containerRef={mapOverlayRef}
-              valueMinutes={timeOffsetMinutes}
-              onChangeMinutes={setTimeOffsetMinutes}
-            />
           </>
         ) : null}
 
@@ -122,7 +113,6 @@ function App() {
           onMapClick={onMapClick}
           mapType={mapType}
           windParticlesEnabled={windParticlesEnabled}
-          timeOffsetMinutes={timeOffsetMinutes}
           selectedCity={selectedCity}
         />
         {overlaysVisible ? <Legend config={config} mapType={mapType} /> : null}

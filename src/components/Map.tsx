@@ -7,7 +7,6 @@ import Map, {
   type MapRef,
 } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
-
 import type { Coords, CityResult } from "../types";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { getWeather, reverseGeocode } from "../api";
@@ -285,6 +284,8 @@ export default function WeatherMap({
       }}
       style={{ width: "100%", height: "100vh" }}
       onClick={handleMapClick}
+      maxTileCacheSize={200}
+      refreshExpiredTiles={false}
     >
       {/* 1. Base Weather Layer */}
       <Source
@@ -292,16 +293,13 @@ export default function WeatherMap({
         type="raster"
         tiles={[tileUrl]}
         tileSize={256}
-        volatile={true} // Tells MapLibre to prioritize these tiles during movement
-        key={tileUrl} // Forces refresh on URL change
       >
         <Layer
           id="weather-layer"
           type="raster"
-          key={tileUrl} // Forces refresh on URL change
           paint={{
             "raster-opacity": 0.7,
-            "raster-fade-duration": 300, // Smooth transition between zooms/layers
+            "raster-fade-duration": 500,
           }}
         />
       </Source>
