@@ -292,14 +292,14 @@ export default function WeatherMap({
         id="weather-source"
         type="raster"
         tiles={[tileUrl]}
-        tileSize={256}
+        tileSize={512}
       >
         <Layer
           id="weather-layer"
           type="raster"
           paint={{
             "raster-opacity": 0.7,
-            "raster-fade-duration": 500,
+            "raster-fade-duration": 200,
           }}
         />
       </Source>
