@@ -33,7 +33,7 @@ type Particle = {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const PARTICLE_COUNT = 300;
+const PARTICLE_COUNT = 500;
 const DT_BASE = 300;
 const BASE_ZOOM = 6;
 const MARGIN_PX = 60;
@@ -102,15 +102,23 @@ export function WindParticlesLayer({
   // useMap() from react-map-gl — works because this component renders inside <Map>
   const { current: map } = useMap();
 
-  // ── Grid fetch — city-keyed, once per session ────────────────────────────
+  // ── Grid fetch — locked to first valid coords, never changes ─────────────
+  // Recomputing snap from coords on every render would produce a new query key
+  // on every click, fetching a new grid and changing wind direction. Instead we
+  // lock the snap on the first render where enabled + coords are both truthy,
+  // so the same grid is reused for the entire session regardless of map interaction.
 
-  const snap = coords ? citySnapFor(coords.lat, coords.lon) : null;
+  const lockedSnapRef = useRef<{ lat: number; lon: number } | null>(null);
+  if (enabled && coords && !lockedSnapRef.current) {
+    lockedSnapRef.current = citySnapFor(coords.lat, coords.lon);
+  }
+  const snap = lockedSnapRef.current;
   const bounds = snap ? cityBoundsFor(snap.lat, snap.lon) : null;
 
   const { data: grid } = useQuery({
     queryKey: snap ? ["windGrid", snap.lat, snap.lon] : ["windGrid", "disabled"],
     queryFn: () => fetchWindGrid(bounds!),
-    staleTime: Infinity,
+    staleTime: 30 * 60 * 1000, // re-fetch after 30 minutes
     gcTime: Infinity,
     enabled: !!enabled && !!snap,
   });
