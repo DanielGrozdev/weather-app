@@ -186,6 +186,30 @@
   html {
     @apply font-sans;
   }
+  /* dark scrollbar */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #0f172a; /* dark bg */
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #334155; /* slate */
+    border-radius: 8px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #475569;
+  }
+
+  /* Firefox */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #334155 #0f172a;
+  }
 }
 
 /* ─── Custom weather marker ──────────────────────────────────────────────── */

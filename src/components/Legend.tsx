@@ -13,7 +13,7 @@ type Props = {
 export default function Legend({ config, mapType }: Props) {
   return (
     <div
-      className="pointer-events-auto mr-4 mb-4 w-[300px]"
+      className="pointer-events-auto mr-4 mb-14 w-[300px]"
       style={{
         position: "absolute",
         bottom: 0,

@@ -1,14 +1,14 @@
 import Map from "./components/Map";
-// import DailyForecast from "./components/cards/DailyForecast";
-// import HourlyForecast from "./components/cards/HourlyForecast";
 import LayerTypes from "./components/menus/LayerTypes";
 import CitySearch from "./components/search/CitySearch";
 import { useWeatherApp } from "./hooks/useWeatherApp";
 import Legend from "./components/Legend";
 import { legendConfigMap } from "./lib/consts";
 import WeatherOverlay from "./components/WeatherOverlay";
+import BottomDrawer from "./components/BottomDrawer";
+import ForecastDrawer from "./components/ForecastDrawer";
 import { Eye, EyeOff } from "lucide-react";
-import { useMemo, useRef } from "react";
+import { useMemo } from "react";
 import { useUnits } from "./hooks/useUnits";
 import { useTranslation } from "react-i18next";
 import LanguageSwitcher from "./components/LanguageSwitcher";
@@ -31,11 +31,10 @@ function App() {
   const { units, toggle: toggleUnits } = useUnits();
   const { t } = useTranslation();
   const config = useMemo(() => legendConfigMap[mapType], [mapType]);
-  const mapOverlayRef = useRef<HTMLDivElement>(null);
 
   return (
     <div className="flex flex-col gap-8">
-      <div ref={mapOverlayRef} className="relative">
+      <div className="relative">
         <div className="absolute left-2 top-2 z-1100 pointer-events-auto">
           <img
             src={Logo}
@@ -116,10 +115,11 @@ function App() {
           selectedCity={selectedCity}
         />
         {overlaysVisible ? <Legend config={config} mapType={mapType} /> : null}
-      </div>
 
-      {/* <HourlyForecast coords={coords} />
-      <DailyForecast coords={coords} /> */}
+        <BottomDrawer>
+          <ForecastDrawer coords={coords} />
+        </BottomDrawer>
+      </div>
     </div>
   );
 }
