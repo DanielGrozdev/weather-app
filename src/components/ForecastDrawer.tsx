@@ -12,7 +12,7 @@ import WeatherIcon from "./WeatherIcon";
 const CARD_W = 56;
 const CARD_GAP = 6;
 const CARD_STEP = CARD_W + CARD_GAP; // 62px
-const CHART_H = 60;
+const CHART_H = 40;
 const PAD_Y = 4;
 const TT_W = 140;
 const TT_H = 38;
@@ -249,7 +249,7 @@ export default function ForecastDrawer({ coords }: Props) {
             </div>
 
             {/* Charts — pixel-aligned with the cards above */}
-            <div className="space-y-5 pb-2">
+            <div className="space-y-3 pb-2">
               <LineChart
                 label="Temperature"
                 values={hours.map((h) => h.temp)}
@@ -277,33 +277,6 @@ export default function ForecastDrawer({ coords }: Props) {
         </div>
       </Section>
 
-      <div className="border-t border-border/40" />
-
-      {/* ── 8-day ── */}
-      <Section title="8-Day Forecast">
-        <div className="overflow-x-auto -mx-4 px-4">
-          <div className="flex gap-1.5 pb-1">
-            {data.daily.map((day) => (
-              <div
-                key={day.dt}
-                className="w-14 shrink-0 flex flex-col items-center gap-1.5 py-2 rounded-xl
-                           bg-muted/15 hover:bg-muted/25 transition-colors"
-              >
-                <span className="text-[10px] text-muted-foreground">
-                  {new Date(day.dt * 1000).toLocaleDateString(undefined, { weekday: "short" })}
-                </span>
-                <WeatherIcon src={day.weather[0].icon} className="size-6" />
-                <span className="text-xs font-medium tabular-nums">
-                  {formatTemp(day.temp.day, units)}
-                </span>
-                <span className="text-[10px] text-muted-foreground/60 tabular-nums">
-                  {formatTemp(day.temp.min, units)}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Section>
 
     </div>
   );

@@ -40,7 +40,7 @@ export default function BottomDrawer({ children, label = "Forecast" }: Props) {
       {/* Scrollable content */}
       <div
         className="overflow-y-auto"
-        style={{ maxHeight: `calc(50vh - ${HANDLE_H}px)` }}
+        style={{ maxHeight: `calc(65vh - ${HANDLE_H}px)` }}
       >
         {children}
       </div>
