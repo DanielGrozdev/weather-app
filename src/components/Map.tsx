@@ -1,25 +1,27 @@
-import { MapContainer, Marker, useMap, useMapEvents } from "react-leaflet";
-import { MaptilerLayer, MapStyle } from "@maptiler/leaflet-maptilersdk";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
-import type { Coords } from "../types";
-import { useCallback, useEffect, useMemo, useRef } from "react";
-import { WindParticlesLayer } from "./WindParticles";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef } from "react";
+import Map, {
+  Source,
+  Layer,
+  Marker,
+  type MapMouseEvent,
+  type MapRef,
+} from "react-map-gl/maplibre";
+import "maplibre-gl/dist/maplibre-gl.css";
+
+import type { Coords, CityResult } from "../types";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { getWeather, reverseGeocode } from "../api";
 import { useUnits } from "../hooks/useUnits";
-import { formatTemp, formatWindSpeed } from "../lib/format";
-import type { CityResult } from "../types";
-import type { Units } from "../context/units-context";
-import {
-  WebGLWeatherLayer,
-  type WeatherLayer,
-  type WeatherTileCoords,
-} from "./WebGLWeatherLayer";
+import type { Units } from "@/context/units-context";
+import { formatTemp, formatWindSpeed } from "@/lib/format";
+
+// Note: Ensure WindParticlesLayer is updated to be MapLibre compatible
+// or temporarily disabled if it relies on Leaflet's L.Canvas
+// import { WindParticlesLayer } from "./WindParticles";
 
 const API_KEY = import.meta.env.VITE_API_KEY;
 const MAPTILER_API_KEY = import.meta.env.VITE_MAP_TILER_KEY;
-const MAPTILER_STYLE = MapStyle.BACKDROP.DARK;
+const MAPTILER_STYLE = `https://api.maptiler.com/maps/backdrop-dark/style.json?key=${MAPTILER_API_KEY}`;
 
 type Props = {
   coords: Coords;
@@ -61,83 +63,83 @@ type LayerConfig = {
 // L.divIcon accepts an HTMLElement directly for its `html` option, so we never
 // need to serialize this back to a string.
 
-const SVG_NS = "http://www.w3.org/2000/svg";
+// const SVG_NS = "http://www.w3.org/2000/svg";
 
-function makeSvgIcon(paths: string): SVGSVGElement {
-  const svg = document.createElementNS(SVG_NS, "svg");
-  svg.setAttribute("width", "13");
-  svg.setAttribute("height", "13");
-  svg.setAttribute("viewBox", "0 0 24 24");
-  svg.setAttribute("fill", "none");
-  svg.setAttribute("stroke", "rgba(255,255,255,0.82)");
-  svg.setAttribute("stroke-width", "2.2");
-  svg.setAttribute("stroke-linecap", "round");
-  svg.setAttribute("stroke-linejoin", "round");
-  svg.style.cssText = "display:block;flex-shrink:0;";
-  // paths is a trusted module-level constant, not user input
-  svg.innerHTML = paths;
-  return svg;
-}
+// function makeSvgIcon(paths: string): SVGSVGElement {
+//   const svg = document.createElementNS(SVG_NS, "svg");
+//   svg.setAttribute("width", "13");
+//   svg.setAttribute("height", "13");
+//   svg.setAttribute("viewBox", "0 0 24 24");
+//   svg.setAttribute("fill", "none");
+//   svg.setAttribute("stroke", "rgba(255,255,255,0.82)");
+//   svg.setAttribute("stroke-width", "2.2");
+//   svg.setAttribute("stroke-linecap", "round");
+//   svg.setAttribute("stroke-linejoin", "round");
+//   svg.style.cssText = "display:block;flex-shrink:0;";
+//   // paths is a trusted module-level constant, not user input
+//   svg.innerHTML = paths;
+//   return svg;
+// }
 
-function createMarkerNode(
-  colors: MarkerColors,
-  iconPaths: string,
-  value: string,
-  locationLabel: string,
-): HTMLElement {
-  // Outer wrapper — carries the drop-shadow filter
-  const wrapper = document.createElement("div");
-  wrapper.style.cssText =
-    `display:flex;flex-direction:column;align-items:center;width:120px;` +
-    `filter:drop-shadow(0 4px 14px ${colors.glow});` +
-    `z-index:500;` +
-    `pointer-events:none;`;
+// function createMarkerNode(
+//   colors: MarkerColors,
+//   iconPaths: string,
+//   value: string,
+//   locationLabel: string,
+// ): HTMLElement {
+//   // Outer wrapper — carries the drop-shadow filter
+//   const wrapper = document.createElement("div");
+//   wrapper.style.cssText =
+//     `display:flex;flex-direction:column;align-items:center;width:120px;` +
+//     `filter:drop-shadow(0 4px 14px ${colors.glow});` +
+//     `z-index:500;` +
+//     `pointer-events:none;`;
 
-  // Pill
-  const pill = document.createElement("div");
-  pill.style.cssText =
-    `width:100px;flex-direction:column;display:flex;align-items:center;` +
-    `justify-content:center;gap:5px;background:${colors.bg};color:#E8E8E8;` +
-    `font-weight:700;font-size:13px;font-family:ui-sans-serif,system-ui,sans-serif;` +
-    `line-height:1.2;padding:5px 0;border-radius:10px;` +
-    `border:1.5px solid rgba(255,255,255,0.22);box-shadow:0 2px 6px rgba(0,0,0,0.28);`;
+//   // Pill
+//   const pill = document.createElement("div");
+//   pill.style.cssText =
+//     `width:100px;flex-direction:column;display:flex;align-items:center;` +
+//     `justify-content:center;gap:5px;background:${colors.bg};color:#E8E8E8;` +
+//     `font-weight:700;font-size:13px;font-family:ui-sans-serif,system-ui,sans-serif;` +
+//     `line-height:1.2;padding:5px 0;border-radius:10px;` +
+//     `border:1.5px solid rgba(255,255,255,0.22);box-shadow:0 2px 6px rgba(0,0,0,0.28);`;
 
-  if (locationLabel) {
-    const name = document.createElement("span");
-    name.style.cssText =
-      `color:rgba(255,255,255,0.85);font-size:11px;font-weight:600;` +
-      `max-width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;`;
-    name.textContent = locationLabel;
-    pill.appendChild(name);
-  }
+//   if (locationLabel) {
+//     const name = document.createElement("span");
+//     name.style.cssText =
+//       `color:rgba(255,255,255,0.85);font-size:11px;font-weight:600;` +
+//       `max-width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;`;
+//     name.textContent = locationLabel;
+//     pill.appendChild(name);
+//   }
 
-  const row = document.createElement("div");
-  row.style.cssText =
-    "display:flex;align-items:center;justify-content:center;gap:5px;";
-  row.appendChild(makeSvgIcon(iconPaths));
+//   const row = document.createElement("div");
+//   row.style.cssText =
+//     "display:flex;align-items:center;justify-content:center;gap:5px;";
+//   row.appendChild(makeSvgIcon(iconPaths));
 
-  const valueSpan = document.createElement("span");
-  valueSpan.textContent = value;
-  row.appendChild(valueSpan);
+//   const valueSpan = document.createElement("span");
+//   valueSpan.textContent = value;
+//   row.appendChild(valueSpan);
 
-  pill.appendChild(row);
-  wrapper.appendChild(pill);
+//   pill.appendChild(row);
+//   wrapper.appendChild(pill);
 
-  // Triangle tip
-  const tip = document.createElementNS(SVG_NS, "svg");
-  tip.setAttribute("width", "16");
-  tip.setAttribute("height", "11");
-  tip.setAttribute("viewBox", "0 0 16 11");
-  tip.setAttribute("fill", "none");
-  tip.style.cssText = "display:block;margin-top:-1px;";
-  const poly = document.createElementNS(SVG_NS, "polygon");
-  poly.setAttribute("points", "8,11 0,0 16,0");
-  poly.setAttribute("fill", colors.bg);
-  tip.appendChild(poly);
-  wrapper.appendChild(tip);
+//   // Triangle tip
+//   const tip = document.createElementNS(SVG_NS, "svg");
+//   tip.setAttribute("width", "16");
+//   tip.setAttribute("height", "11");
+//   tip.setAttribute("viewBox", "0 0 16 11");
+//   tip.setAttribute("fill", "none");
+//   tip.style.cssText = "display:block;margin-top:-1px;";
+//   const poly = document.createElementNS(SVG_NS, "polygon");
+//   poly.setAttribute("points", "8,11 0,0 16,0");
+//   poly.setAttribute("fill", colors.bg);
+//   tip.appendChild(poly);
+//   wrapper.appendChild(tip);
 
-  return wrapper;
-}
+//   return wrapper;
+// }
 
 const LAYER_CONFIG: Record<string, LayerConfig> = {
   temp_new: {
@@ -229,68 +231,7 @@ function buildTileUrl(mapType: string, apiKey: string, offsetMinutes: number) {
   return `${base}&date=${ts}`;
 }
 
-// ─── Map ─────────────────────────────────────────────────────────────────────
-
-export default function Map({
-  coords,
-  onMapClick,
-  mapType,
-  windParticlesEnabled,
-  timeOffsetMinutes = 0,
-  selectedCity,
-}: Props) {
-  const { lat, lon } = coords;
-  const tileUrl = useMemo(
-    () => buildTileUrl(mapType, API_KEY, timeOffsetMinutes),
-    [mapType, timeOffsetMinutes],
-  );
-
-  return (
-    <MapContainer
-      center={[lat, lon]}
-      inertia
-      touchZoom
-      preferCanvas
-      markerZoomAnimation
-      zoomControl={false}
-      zoom={6}
-      minZoom={2}
-      maxZoom={15}
-      zoomSnap={1}
-      zoomDelta={1}
-      inertiaDeceleration={3000}
-      easeLinearity={0.1}
-      style={{ width: "100%", height: "100vh" }}
-    >
-      <MapController onMapClick={onMapClick} coords={coords} />
-      <WindParticlesLayer enabled={windParticlesEnabled} coords={coords} />
-      <MapTileLayer />
-      <WeatherWebGLLayer url={tileUrl} mapType={mapType} />
-      <CustomMarker
-        coords={coords}
-        mapType={mapType}
-        timeOffsetMinutes={timeOffsetMinutes}
-        selectedCity={selectedCity}
-      />
-    </MapContainer>
-  );
-}
-
-// ─── Custom marker ────────────────────────────────────────────────────────────
-
-/**
- * Flag-style pin: a temperature-pill (colour-coded by temperature) with a
- * downward-pointing triangle as the pin tip. On hover a compact tooltip shows
- * temperature, wind speed, and pressure.
- *
- * Uses the same React Query key as WeatherOverlay so there is no extra network
- * request — the response is always served from the in-memory cache.
- */
-/** Mirrors the same hourly-selection logic used in WeatherOverlay. */
-function pickDisplayData(
-  data: Awaited<ReturnType<typeof getWeather>>,
-  offsetMinutes: number,
-) {
+function pickDisplayData(data, offsetMinutes: number) {
   if (offsetMinutes <= 0) return data.current;
   const targetTs = Date.now() / 1000 + offsetMinutes * 60;
   const future = data.hourly.filter(
@@ -302,10 +243,87 @@ function pickDisplayData(
   );
 }
 
+// --- Main Component ---
+
+export default function WeatherMap({
+  coords,
+  onMapClick,
+  mapType,
+  timeOffsetMinutes = 0,
+  selectedCity,
+}: Props) {
+  const mapRef = useRef<MapRef>(null);
+
+  useEffect(() => {
+    if (mapRef.current) {
+      mapRef.current.flyTo({
+        center: [coords.lon, coords.lat],
+        duration: 2000, // Smooth transition in milliseconds
+        essential: true,
+      });
+    }
+  }, [coords]); // Only runs when coords change
+
+  const tileUrl = useMemo(
+    () => buildTileUrl(mapType, API_KEY, timeOffsetMinutes),
+    [mapType, timeOffsetMinutes],
+  );
+
+  const handleMapClick = (e: MapMouseEvent) => {
+    onMapClick(e.lngLat.lat, e.lngLat.lng);
+  };
+
+  return (
+    <Map
+      ref={mapRef}
+      mapStyle={MAPTILER_STYLE}
+      attributionControl={false}
+      initialViewState={{
+        latitude: coords.lat,
+        longitude: coords.lon,
+        zoom: 5,
+      }}
+      style={{ width: "100%", height: "100vh" }}
+      onClick={handleMapClick}
+    >
+      {/* 1. Base Weather Layer */}
+      <Source
+        id="weather-source"
+        type="raster"
+        tiles={[tileUrl]}
+        tileSize={256}
+        volatile={true} // Tells MapLibre to prioritize these tiles during movement
+        key={tileUrl} // Forces refresh on URL change
+      >
+        <Layer
+          id="weather-layer"
+          type="raster"
+          key={tileUrl} // Forces refresh on URL change
+          paint={{
+            "raster-opacity": 0.7,
+            "raster-fade-duration": 300, // Smooth transition between zooms/layers
+          }}
+        />
+      </Source>
+
+      {/* 2. Custom Marker */}
+      <CustomMarker
+        coords={coords}
+        mapType={mapType}
+        timeOffsetMinutes={timeOffsetMinutes}
+        selectedCity={selectedCity}
+      />
+
+      {/* Optional: Add WindParticlesLayer here once refactored */}
+    </Map>
+  );
+}
+
+// --- Marker Component (Now pure React) ---
 function CustomMarker({
   coords,
   mapType,
-  timeOffsetMinutes = 0,
+  timeOffsetMinutes,
   selectedCity,
 }: {
   coords: Coords;
@@ -315,9 +333,6 @@ function CustomMarker({
 }) {
   const { units } = useUnits();
 
-  // ── Step 2: stable query keys via rounded coords (set upstream in useWeatherApp)
-  // placeholderData keeps the previous result visible while a new fetch runs,
-  // preventing the marker from flickering to "–" during refetches.
   const { data: pinnedCity } = useQuery({
     queryKey: ["reverseGeocode", coords.lat, coords.lon],
     queryFn: () => reverseGeocode(coords.lat, coords.lon),
@@ -333,9 +348,6 @@ function CustomMarker({
     placeholderData: keepPreviousData,
   });
 
-  // ── Step 1: memoize all derived values so the icon is only rebuilt when
-  // something actually changed, not on every parent render.
-
   const display = useMemo(() => {
     if (!data) return null;
     return mapType === "precipitation_new" &&
@@ -345,22 +357,19 @@ function CustomMarker({
       : pickDisplayData(data, timeOffsetMinutes);
   }, [data, mapType, timeOffsetMinutes]);
 
-  // cfg is stable per mapType — avoids getValue/getColors closure churn
   const cfg = useMemo(
     () => LAYER_CONFIG[mapType] ?? FALLBACK_CONFIG,
     [mapType],
   );
-
   const value = useMemo(
     () => (display ? cfg.getValue(display, units) : "–"),
     [display, cfg, units],
   );
-
   const colors = useMemo(
     () =>
       display
         ? cfg.getColors(display, units)
-        : { bg: "#6b7280", glow: "rgba(107,114,128,0.4)" },
+        : { bg: "#6b7280", glow: "rgba(0,0,0,0.3)" },
     [display, cfg, units],
   );
 
@@ -370,152 +379,75 @@ function CustomMarker({
     return "";
   }, [selectedCity, pinnedCity]);
 
-  // ── Step 4: build the icon from real DOM nodes instead of an HTML string.
-  // L.divIcon accepts HTMLElement directly; no innerHTML concatenation in the
-  // render path. The useMemo ensures we only create a new DOM tree + DivIcon
-  // instance when one of the stable memoized values above actually changed.
-  const icon = useMemo(
-    () =>
-      L.divIcon({
-        html: createMarkerNode(colors, cfg.iconPaths, value, locationLabel),
-        className: "weather-marker-icon",
-        iconSize: [120, 58],
-        iconAnchor: [60, 58],
-      }),
-    [colors, cfg, value, locationLabel],
+  return (
+    <Marker longitude={coords.lon} latitude={coords.lat} anchor="bottom">
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          filter: `drop-shadow(0 4px 14px ${colors.glow})`,
+          pointerEvents: "none",
+          width: "120px",
+        }}
+      >
+        {/* Pill */}
+        <div
+          style={{
+            width: "100px",
+            background: colors.bg,
+            color: "#E8E8E8",
+            padding: "5px 0",
+            borderRadius: "10px",
+            border: "1.5px solid rgba(255,255,255,0.22)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            fontSize: "13px",
+            fontWeight: 700,
+          }}
+        >
+          {locationLabel && (
+            <span
+              style={{
+                fontSize: "11px",
+                opacity: 0.85,
+                marginBottom: "2px",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                maxWidth: "90px",
+              }}
+            >
+              {locationLabel}
+            </span>
+          )}
+          <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="white"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              dangerouslySetInnerHTML={{ __html: cfg.iconPaths }}
+            />
+            <span>{value}</span>
+          </div>
+        </div>
+
+        {/* Triangle Tip */}
+        <svg
+          width="16"
+          height="11"
+          viewBox="0 0 16 11"
+          style={{ marginTop: "-1px" }}
+        >
+          <polygon points="8,11 0,0 16,0" fill={colors.bg} />
+        </svg>
+      </div>
+    </Marker>
   );
-
-  return <Marker position={[coords.lat, coords.lon]} icon={icon} />;
-}
-
-// ─── MapController ────────────────────────────────────────────────────────────
-
-/**
- * Pans the map when coords change and registers a single click handler that
- * forwards lat/lng up. Replaces the previous render-side `map.on('click', ...)`
- * call which leaked a new listener on every render.
- *
- * `panTo` must wait for the map's panes to be ready, otherwise it crashes with
- * "Cannot read properties of undefined (reading '_leaflet_pos')" — particularly
- * under React StrictMode where the map double-mounts in dev. `whenReady`
- * resolves immediately if the map is already initialized, so it's safe to use
- * for both the first-paint pan and subsequent coord changes.
- */
-const MapController = ({
-  onMapClick,
-  coords,
-}: {
-  onMapClick: (lat: number, lon: number) => void;
-  coords: Coords;
-}) => {
-  const map = useMap();
-  const handleClick = useCallback(
-    (e: { latlng: { lat: number; lng: number } }) => {
-      onMapClick(e.latlng.lat, e.latlng.lng);
-    },
-    [onMapClick],
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    map.whenReady(() => {
-      if (cancelled) return;
-      try {
-        // Jump directly to the new location so Leaflet doesn't fetch every
-        // intermediate tile across long distances (e.g. EU → US).
-        map.setView([coords.lat, coords.lon], map.getZoom(), {
-          animate: false,
-        });
-      } catch {
-        // The map was torn down between whenReady and now (StrictMode
-        // double-effect). Safe to ignore — the next mount will pan correctly.
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [coords.lat, coords.lon, map]);
-
-  useMapEvents({
-    click: (e) => handleClick(e),
-  });
-
-  return null;
-};
-
-// ─── MapTileLayer ─────────────────────────────────────────────────────────────
-
-function MapTileLayer() {
-  const map = useMap();
-
-  useEffect(() => {
-    const tileLayer = new MaptilerLayer({
-      style: MAPTILER_STYLE,
-      apiKey: MAPTILER_API_KEY,
-    });
-    tileLayer.addTo(map);
-
-    return () => {
-      try {
-        map.removeLayer(tileLayer);
-      } catch {
-        // Map already torn down (StrictMode double-effect / unmount race).
-      }
-    };
-  }, [map]);
-
-  return null;
-}
-
-function WeatherWebGLLayer({ url, mapType }: { url: string; mapType: string }) {
-  const map = useMap();
-  const layerRef = useRef<WeatherLayer | null>(null);
-
-  // ── Create the layer once per map instance ────────────────────────────────
-  // Destroying and re-creating on every URL change throws away the entire tile
-  // cache and WebGL context. Instead we keep ONE persistent layer and update
-  // only its internal URL via setTileUrl().
-  useEffect(() => {
-    const layer = new (WebGLWeatherLayer as new (
-      ...args: object[]
-    ) => WeatherLayer)({
-      tileSize: 256,
-      opacity: 1,
-      updateWhenZooming: true, // Let tiles load DURING the zoom animation
-      updateWhenIdle: false, // Don't wait for the map to stop moving
-      keepBuffer: 4, // Keep more tiles off-screen to prevent white gaps
-      crossOrigin: true,
-      reuseTiles: true,
-      fadeAnimation: true,
-      getTileUrl: (coords: WeatherTileCoords) =>
-        url
-          .replace("{z}", String(coords.z))
-          .replace("{x}", String(coords.x))
-          .replace("{y}", String(coords.y)),
-    });
-
-    layer.addTo(map);
-    layerRef.current = layer;
-
-    return () => {
-      layer.remove();
-      layerRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map]);
-
-  // ── Update the URL without re-creating the layer ──────────────────────────
-  useEffect(() => {
-    const layer = layerRef.current;
-    if (!layer) return;
-
-    layer.setTileUrl((coords: WeatherTileCoords) =>
-      url
-        .replace("{z}", String(coords.z))
-        .replace("{x}", String(coords.x))
-        .replace("{y}", String(coords.y)),
-    );
-  }, [url, mapType]);
-
-  return null;
 }

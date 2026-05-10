@@ -206,7 +206,7 @@ export default function CitySearch({
       {dropdownOpen && (
         <div
           className={[
-            "absolute left-0 right-0 mt-2 z-[1001]",
+            "absolute left-0 right-0 mt-2 z-1001",
             "rounded-2xl border border-border bg-popover/95 backdrop-blur-xl shadow-2xl",
             "overflow-hidden",
             "animate-in fade-in-0 slide-in-from-top-1 duration-150",
