@@ -1,10 +1,17 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
-import {
-  DEFAULT_UNITS,
-  UNITS_STORAGE_KEY,
-  UnitsContext,
-  type Units,
-} from "./units-context";
+import { createContext, useCallback, useEffect, useState, type ReactNode } from "react";
+
+export type Units = "metric" | "imperial";
+
+export const UNITS_STORAGE_KEY = "weather-app:units";
+export const DEFAULT_UNITS: Units = "metric";
+
+export type UnitsContextValue = {
+  units: Units;
+  setUnits: (u: Units) => void;
+  toggle: () => void;
+};
+
+export const UnitsContext = createContext<UnitsContextValue | null>(null);
 
 function readStoredUnits(): Units {
   if (typeof window === "undefined") return DEFAULT_UNITS;

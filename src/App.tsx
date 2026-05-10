@@ -28,6 +28,7 @@ function App() {
     toggleOverlays,
   } = useWeatherApp();
 
+
   const { units, toggle: toggleUnits } = useUnits();
   const { t } = useTranslation();
   const config = useMemo(() => legendConfigMap[mapType], [mapType]);

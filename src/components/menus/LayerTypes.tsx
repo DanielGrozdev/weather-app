@@ -1,10 +1,11 @@
 import type { Dispatch, SetStateAction } from "react";
 import { Cloud, Droplets, Gauge, Thermometer, Wind } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import type { MapLayerType } from "../../types";
 
 type Props = {
-  mapType: string;
-  setMapType: Dispatch<SetStateAction<string>>;
+  mapType: MapLayerType;
+  setMapType: Dispatch<SetStateAction<MapLayerType>>;
   windParticlesEnabled: boolean;
   setWindParticlesEnabled: Dispatch<SetStateAction<boolean>>;
 };

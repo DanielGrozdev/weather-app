@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import type { CityResult, Coords } from "../types";
+import type { CityResult, Coords, MapLayerType } from "../types";
 
 const DEFAULT_CITY: CityResult = {
   name: "Varna",
@@ -7,26 +7,11 @@ const DEFAULT_CITY: CityResult = {
   lat: 43.2,
   lon: 27.9,
 };
-const DEFAULT_MAP_TYPE = "temp_new";
 
-/**
- * Centralizes the top-level state for the weather app:
- * - selectedCity: result picked from the city search (carries lat/lon, so no
- *   second geocode round-trip is needed)
- * - customCoords: coordinates from a map click (no associated city)
- * - active map overlay type
- * - desktop cards-rail visibility (used by the map layout in a later phase)
- *
- * `coords` is derived: customCoords win when set (the most recent intent),
- * otherwise the selected city, otherwise the Varna default.
- */
 export function useWeatherApp() {
-  const [selectedCity, setSelectedCity] = useState<CityResult | null>(
-    DEFAULT_CITY,
-  );
+  const [selectedCity, setSelectedCity] = useState<CityResult | null>(DEFAULT_CITY);
   const [customCoords, setCustomCoords] = useState<Coords | null>(null);
-  const [mapType, setMapType] = useState(DEFAULT_MAP_TYPE);
-  const [cardsVisible, setCardsVisible] = useState(true);
+  const [mapType, setMapType] = useState<MapLayerType>("temp_new");
   const [windParticlesEnabled, setWindParticlesEnabled] = useState(false);
   const [overlaysVisible, setOverlaysVisible] = useState(true);
 
@@ -40,11 +25,6 @@ export function useWeatherApp() {
     setSelectedCity(null);
   }, []);
 
-  const toggleCards = useCallback(() => setCardsVisible((v) => !v), []);
-  const toggleWindParticles = useCallback(
-    () => setWindParticlesEnabled((v) => !v),
-    [],
-  );
   const toggleOverlays = useCallback(() => setOverlaysVisible((v) => !v), []);
 
   // Round to 2 dp (~1 km grid) so all downstream React Query keys stay stable
@@ -68,13 +48,9 @@ export function useWeatherApp() {
     mapType,
     setMapType,
     onMapClick,
-    cardsVisible,
-    toggleCards,
     windParticlesEnabled,
     setWindParticlesEnabled,
-    toggleWindParticles,
     overlaysVisible,
-    setOverlaysVisible,
     toggleOverlays,
   };
 }

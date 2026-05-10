@@ -1,4 +1,4 @@
-import type { Units } from "../context/units-context";
+import type { Units } from "../context/UnitsContext";
 
 /**
  * Format a temperature value. The OpenWeather One Call API returns the value

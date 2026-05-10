@@ -3,16 +3,13 @@ export type Coords = {
   lon: number;
 };
 
-export type WeatherLayerOptions = {
-  tileSize: number;
-  opacity: number;
-  getTileUrl: (coords: { x: number; y: number; z: number }) => string;
-};
+export type MapLayerType =
+  | "temp_new"
+  | "pressure_new"
+  | "wind_new"
+  | "precipitation_new"
+  | "clouds_new";
 
-/**
- * A geocoded city result from the OpenWeather direct geocode endpoint,
- * normalized to the fields we actually consume in the UI.
- */
 export type CityResult = {
   name: string;
   country: string;
@@ -21,7 +18,6 @@ export type CityResult = {
   lon: number;
 };
 
-/** Stable identity for a city used as a list key and de-dupe key. */
 export function cityKey(c: CityResult): string {
   return `${c.lat.toFixed(4)}|${c.lon.toFixed(4)}|${c.name}`;
 }

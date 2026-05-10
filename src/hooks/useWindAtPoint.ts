@@ -18,7 +18,7 @@ import {
   sampleGrid,
   uvToWind,
 } from "../lib/windGrid";
-import type { Units } from "../context/units-context";
+import type { Units } from "../context/UnitsContext";
 
 type Coords = { lat: number; lon: number };
 
