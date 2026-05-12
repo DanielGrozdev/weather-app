@@ -116,7 +116,7 @@ function App() {
           windParticlesEnabled={windParticlesEnabled}
           selectedCity={selectedCity}
         />
-        {overlaysVisible ? <Legend config={config} mapType={mapType} /> : null}
+        {overlaysVisible ? <Legend config={config} /> : null}
 
         <BottomDrawer>
           <ForecastDrawer coords={coords} />

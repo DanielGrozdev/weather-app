@@ -7,10 +7,9 @@ type LegendConfig = {
 
 type Props = {
   config: LegendConfig;
-  mapType: string;
 };
 
-export default function Legend({ config, mapType }: Props) {
+export default function Legend({ config }: Props) {
   return (
     <div
       className="pointer-events-auto mr-4 mb-14 w-[300px]"
@@ -29,10 +28,10 @@ export default function Legend({ config, mapType }: Props) {
           <span className="shrink-0 text-xs">{config.min}</span>
 
           <div
-            className="h-3 w-full rounded opacity-70"
+            className="h-3 w-full rounded"
             style={{
               background: config.gradient,
-              opacity: mapType === "clouds_new" ? 0.7 : 1,
+              opacity: 0.7,
             }}
           />
           <span className="shrink-0 text-xs">{config.max}</span>

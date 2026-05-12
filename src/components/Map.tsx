@@ -90,7 +90,9 @@ export default function WeatherMap({
         id="weather-source"
         type="raster"
         tiles={[tileUrl]}
-        tileSize={512}
+        tileSize={256}
+        minzoom={0}
+        maxzoom={12} // Allow the map to upscale tiles beyond level 10
         volatile={true}
       >
         <Layer
@@ -98,7 +100,8 @@ export default function WeatherMap({
           type="raster"
           paint={{
             "raster-opacity": 0.7,
-            "raster-fade-duration": 200,
+            "raster-fade-duration": 400, // Smoother transition
+            "raster-resampling": "linear", // Keeps it from looking pixelated when upscaling
           }}
         />
       </Source>
@@ -128,7 +131,8 @@ export default function WeatherMap({
       trackResize={false}
       style={{ width: "100%", height: "100vh" }}
       onClick={handleMapClick}
-      maxTileCacheSize={200}
+      maxTileCacheSize={500}
+      fadeDuration={500}
       refreshExpiredTiles={false}
     >
       {WeatherLayer}
