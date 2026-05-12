@@ -11,7 +11,14 @@ const DEFAULT_CITY: CityResult = {
 export function useWeatherApp() {
   const [selectedCity, setSelectedCity] = useState<CityResult | null>(DEFAULT_CITY);
   const [customCoords, setCustomCoords] = useState<Coords | null>(null);
-  const [mapType, setMapType] = useState<MapLayerType>("temp_new");
+  const [mapType, setMapType] = useState<MapLayerType>(
+    () => (localStorage.getItem("mapType") as MapLayerType | null) ?? "temp_new",
+  );
+
+  const setMapTypePersisted = useCallback((type: MapLayerType) => {
+    localStorage.setItem("mapType", type);
+    setMapType(type);
+  }, []);
   const [windParticlesEnabled, setWindParticlesEnabled] = useState(false);
   const [overlaysVisible, setOverlaysVisible] = useState(true);
   // 0 = live/current; any other value = Unix timestamp for a forecast step
@@ -48,7 +55,7 @@ export function useWeatherApp() {
     selectCity,
     customCoords,
     mapType,
-    setMapType,
+    setMapType: setMapTypePersisted,
     onMapClick,
     windParticlesEnabled,
     setWindParticlesEnabled,
