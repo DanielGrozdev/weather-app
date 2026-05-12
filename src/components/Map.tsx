@@ -73,13 +73,14 @@ export default function WeatherMap({
   onSyncingChange,
 }: Props) {
   const mapRef = useRef<MapRef>(null);
-  const lastFlownCoords = useRef<{ lat: number; lon: number } | null>(null);
+  // Pre-seed with initial coords so the flight effect skips on first mount
+  const lastFlownCoords = useRef({ lat: coords.lat, lon: coords.lon });
   const mapTypeRef = useRef<MapLayerType>(mapType);
 
   // ── Double-buffer state ────────────────────────────────────────────────────
   const [slotA, setSlotA] = useState<SlotState>({
     url: buildTileUrl(mapType, API_KEY),
-    opacity: 0.7,
+    opacity: 0, // starts invisible; handleIdle fades it in on first load
   });
   const [slotB, setSlotB] = useState<SlotState>({ url: "", opacity: 0 });
 
@@ -94,6 +95,7 @@ export default function WeatherMap({
   // ── Fade-on-Flight refs ────────────────────────────────────────────────────
   const flightGenRef = useRef(0); // incremented on each coords change
   const waitingForIdleRef = useRef(false); // true while flyTo is in progress
+  const initialLoadRef = useRef(true); // cleared after the very first idle
 
   useEffect(() => {
     onSyncingRef.current = onSyncingChange;
@@ -199,10 +201,11 @@ export default function WeatherMap({
 
     const doFly = () => {
       if (flightGenRef.current !== gen) return;
+      const currentZoom = mapRef.current?.getZoom() ?? 5;
       mapRef.current?.flyTo({
         center: [coords.lon, coords.lat],
         duration: 4000,
-        zoom: 5,
+        zoom: Math.max(currentZoom, 5), // never zoom the user out
         essential: true,
       });
       if (!nearby) waitingForIdleRef.current = true;
@@ -216,18 +219,29 @@ export default function WeatherMap({
       const active = activeSlotRef.current;
       if (active === "A") setSlotA((s) => ({ ...s, opacity: 0 }));
       else setSlotB((s) => ({ ...s, opacity: 0 }));
-      setTimeout(doFly, 0);
+      doFly();
     }
   }, [coords]);
 
   // Step 3: idle fires when camera has stopped AND all viewport tiles are loaded
   const handleIdle = useCallback(() => {
+    const active = activeSlotRef.current;
+    const fadeIn = () => {
+      if (active === "A") setSlotA((s) => ({ ...s, opacity: 0.7 }));
+      else setSlotB((s) => ({ ...s, opacity: 0.7 }));
+    };
+
+    // Always fade in on the very first idle (initial page load).
+    if (initialLoadRef.current) {
+      initialLoadRef.current = false;
+      waitingForIdleRef.current = false;
+      fadeIn();
+      return;
+    }
+
     if (!waitingForIdleRef.current) return;
     waitingForIdleRef.current = false;
-
-    const active = activeSlotRef.current;
-    if (active === "A") setSlotA((s) => ({ ...s, opacity: 0.7 }));
-    else setSlotB((s) => ({ ...s, opacity: 0.7 }));
+    fadeIn();
   }, []);
 
   return (

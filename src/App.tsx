@@ -124,7 +124,7 @@ function App() {
           <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-1100 pointer-events-none">
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-card/80 backdrop-blur-sm border border-border text-muted-foreground text-xs">
               <Loader2 className="size-3 animate-spin" />
-              <span>Loading layer…</span>
+              <span>{t("controls.loadingLayer")}</span>
             </div>
           </div>
         )}

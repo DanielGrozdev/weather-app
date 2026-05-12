@@ -39,7 +39,14 @@
     "hideOverlays": "Скрий слоевете",
     "showOverlays": "Покажи слоевете",
     "switchToFahrenheit": "Превключи към Фаренхайт",
-    "switchToCelsius": "Превключи към Целзий"
+    "switchToCelsius": "Превключи към Целзий",
+    "loadingLayer": "Зарежда слой…"
+  },
+  "forecast": {
+    "next48h": "Следващите 48 часа",
+    "temperature": "Температура",
+    "humidity": "Влажност",
+    "pressure": "Налягане"
   },
   "tooltip": {
     "temperature": "Температура",

@@ -39,7 +39,14 @@
     "hideOverlays": "Masquer les couches",
     "showOverlays": "Afficher les couches",
     "switchToFahrenheit": "Passer en Fahrenheit",
-    "switchToCelsius": "Passer en Celsius"
+    "switchToCelsius": "Passer en Celsius",
+    "loadingLayer": "Chargement…"
+  },
+  "forecast": {
+    "next48h": "Prochaines 48 heures",
+    "temperature": "Température",
+    "humidity": "Humidité",
+    "pressure": "Pression"
   },
   "tooltip": {
     "temperature": "Température",

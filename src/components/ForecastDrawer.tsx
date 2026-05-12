@@ -1,5 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { getWeather } from "../api";
 import { useUnits } from "../hooks/useUnits";
 import { formatTemp, formatWindSpeed } from "../lib/format";
@@ -72,19 +73,16 @@ function LineChart({
 
   const hx = hoverIdx !== null ? cardCenterX(hoverIdx) : null;
   const hy = hoverIdx !== null ? ys[hoverIdx] : null;
-  const ttX =
-    hx !== null
-      ? hx + 8 + TT_W > svgW
-        ? hx - TT_W - 8
-        : hx + 8
-      : 0;
+  const ttX = hx !== null ? (hx + 8 + TT_W > svgW ? hx - TT_W - 8 : hx + 8) : 0;
 
   return (
     <div>
       {/* Sticky label — stays at left edge while the chart scrolls */}
       <div className="sticky left-0 z-10 w-fit mb-1.5">
         <div className="flex items-baseline gap-2 rounded-md bg-card/90 backdrop-blur-sm px-2 py-0.5">
-          <span className="text-[11px] font-medium text-foreground/80">{label}</span>
+          <span className="text-[11px] font-medium text-foreground/80">
+            {label}
+          </span>
           <span className="text-[10px] text-muted-foreground/50 tabular-nums">
             {formatValue(min)} – {formatValue(max)}
           </span>
@@ -119,21 +117,54 @@ function LineChart({
         {hx !== null && hy !== null && hoverIdx !== null && (
           <>
             <line
-              x1={hx} y1={0} x2={hx} y2={CHART_H}
-              stroke="white" strokeOpacity="0.15" strokeWidth="1"
+              x1={hx}
+              y1={0}
+              x2={hx}
+              y2={CHART_H}
+              stroke="white"
+              strokeOpacity="0.15"
+              strokeWidth="1"
             />
-            <circle cx={hx} cy={hy} r={4} fill={stroke} stroke="white" strokeWidth="1.5" />
+            <circle
+              cx={hx}
+              cy={hy}
+              r={4}
+              fill={stroke}
+              stroke="white"
+              strokeWidth="1.5"
+            />
             <rect
-              x={ttX} y={2} width={TT_W} height={TT_H} rx={5}
+              x={ttX}
+              y={2}
+              width={TT_W}
+              height={TT_H}
+              rx={5}
               fill="rgba(10,10,20,0.88)"
             />
-            <text x={ttX + 7} y={15} fontSize={9} fill="rgba(156,163,175,1)" fontFamily="inherit">
+            <text
+              x={ttX + 7}
+              y={15}
+              fontSize={9}
+              fill="rgba(156,163,175,1)"
+              fontFamily="inherit"
+            >
               {new Date(timestamps[hoverIdx] * 1000).toLocaleString(undefined, {
-                weekday: "short", month: "short", day: "numeric",
-                hour: "numeric", minute: "2-digit", hour12: true,
+                weekday: "short",
+                month: "short",
+                day: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+                hour12: true,
               })}
             </text>
-            <text x={ttX + 7} y={30} fontSize={12} fontWeight="600" fill="white" fontFamily="inherit">
+            <text
+              x={ttX + 7}
+              y={30}
+              fontSize={12}
+              fontWeight="600"
+              fill="white"
+              fontFamily="inherit"
+            >
               {formatValue(values[hoverIdx])}
             </text>
           </>
@@ -173,6 +204,8 @@ type Props = { coords: Coords };
 
 export default function ForecastDrawer({ coords }: Props) {
   const { units } = useUnits();
+  const { t, i18n } = useTranslation();
+
   const { data, isFetching } = useQuery({
     queryKey: ["weather", coords.lat, coords.lon, units],
     queryFn: () => getWeather({ lat: coords.lat, lon: coords.lon, units }),
@@ -183,7 +216,7 @@ export default function ForecastDrawer({ coords }: Props) {
     () =>
       data?.hourly.map((h) => ({
         dt: h.dt,
-        time: new Date(h.dt * 1000).toLocaleTimeString(undefined, {
+        time: new Date(h.dt * 1000).toLocaleTimeString(i18n.language, {
           hour: "numeric",
           hour12: true,
         }),
@@ -194,8 +227,30 @@ export default function ForecastDrawer({ coords }: Props) {
         humidity: h.humidity,
         pressure: h.pressure,
       })) ?? [],
-    [data],
+    [data, i18n.language],
   );
+
+  // Group consecutive hours by calendar day so we can render breakpoints.
+  // Each group carries how many cards it spans so the header row stays
+  // pixel-aligned with the flat card + chart row below.
+  const dayGroups = useMemo(() => {
+    const groups: { label: string; count: number }[] = [];
+    hours.forEach((h) => {
+      const d = new Date(h.dt * 1000);
+      const label = d.toLocaleDateString(i18n.language, {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      });
+      const last = groups[groups.length - 1];
+      if (last?.label === label) {
+        last.count++;
+      } else {
+        groups.push({ label, count: 1 });
+      }
+    });
+    return groups;
+  }, [hours, i18n.language]);
 
   const timestamps = useMemo(() => hours.map((h) => h.dt), [hours]);
 
@@ -216,11 +271,25 @@ export default function ForecastDrawer({ coords }: Props) {
 
   return (
     <div className="px-4 pb-4 space-y-5">
-
       {/* ── Hourly cards + aligned charts — one unified horizontal scroll ── */}
-      <Section title="Next 48 Hours" badge={refreshBadge}>
+      <Section title={t("forecast.next48h")} badge={refreshBadge}>
         <div className="overflow-x-auto -mx-4 px-4">
           <div style={{ width: totalW }}>
+            {/* Day breakpoints — each cell spans exactly its day's cards */}
+            <div className="flex gap-1.5 mb-2">
+              {dayGroups.map(({ label, count }) => (
+                <div
+                  key={label}
+                  style={{ width: count * CARD_W + (count - 1) * CARD_GAP }}
+                  className="shrink-0"
+                >
+                  <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                    {label}
+                  </span>
+                  <div className="mt-0.5 h-px bg-white/10" />
+                </div>
+              ))}
+            </div>
 
             {/* Cards */}
             <div className="flex gap-1.5 pb-3">
@@ -239,7 +308,9 @@ export default function ForecastDrawer({ coords }: Props) {
                   </span>
                   <UpArrow
                     className="size-4 text-foreground/60"
-                    style={{ transform: `rotate(${(h.windDeg + 180) % 360}deg)` }}
+                    style={{
+                      transform: `rotate(${(h.windDeg + 180) % 360}deg)`,
+                    }}
                   />
                   <span className="text-[10px] text-muted-foreground/60 tabular-nums">
                     {formatWindSpeed(h.windSpeed, units)}
@@ -251,33 +322,30 @@ export default function ForecastDrawer({ coords }: Props) {
             {/* Charts — pixel-aligned with the cards above */}
             <div className="space-y-3 pb-2">
               <LineChart
-                label="Temperature"
+                label={t("forecast.temperature")}
                 values={hours.map((h) => h.temp)}
                 timestamps={timestamps}
                 stroke="#fb923c"
                 formatValue={(v) => formatTemp(v, units)}
               />
               <LineChart
-                label="Humidity"
+                label={t("forecast.humidity")}
                 values={hours.map((h) => h.humidity)}
                 timestamps={timestamps}
                 stroke="#38bdf8"
                 formatValue={(v) => `${Math.round(v)} %`}
               />
               <LineChart
-                label="Pressure"
+                label={t("forecast.pressure")}
                 values={hours.map((h) => h.pressure)}
                 timestamps={timestamps}
                 stroke="#c084fc"
                 formatValue={(v) => `${Math.round(v)} hPa`}
               />
             </div>
-
           </div>
         </div>
       </Section>
-
-
     </div>
   );
 }

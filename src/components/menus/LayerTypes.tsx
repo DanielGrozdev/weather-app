@@ -29,7 +29,6 @@ export default function LayerTypes({
     },
     { value: "clouds_new", labelKey: "layers.clouds", Icon: Cloud },
   ];
-
   return (
     <div className="w-[220px] rounded-2xl border border-border bg-card/60 backdrop-blur-md shadow-2xl overflow-hidden">
       <div className="p-2 space-y-2">

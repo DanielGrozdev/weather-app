@@ -39,7 +39,14 @@
     "hideOverlays": "Hide overlays",
     "showOverlays": "Show overlays",
     "switchToFahrenheit": "Switch to Fahrenheit",
-    "switchToCelsius": "Switch to Celsius"
+    "switchToCelsius": "Switch to Celsius",
+    "loadingLayer": "Loading layer…"
+  },
+  "forecast": {
+    "next48h": "Next 48 hours",
+    "temperature": "Temperature",
+    "humidity": "Humidity",
+    "pressure": "Pressure"
   },
   "tooltip": {
     "temperature": "Temperature",
