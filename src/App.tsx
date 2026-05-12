@@ -8,8 +8,8 @@ import { legendConfigMap } from "./lib/consts";
 import WeatherOverlay from "./components/WeatherOverlay";
 import BottomDrawer from "./components/BottomDrawer";
 import ForecastDrawer from "./components/ForecastDrawer";
-import { Eye, EyeOff } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useUnits } from "./hooks/useUnits";
 import { useTranslation } from "react-i18next";
 import LanguageSwitcher from "./components/LanguageSwitcher";
@@ -27,11 +27,13 @@ function App() {
     setWindParticlesEnabled,
     overlaysVisible,
     toggleOverlays,
+    customCoords,
   } = useWeatherApp();
 
   const { units, toggle: toggleUnits } = useUnits();
   const { t } = useTranslation();
   const config = useMemo(() => legendConfigMap[mapType], [mapType]);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     prewarm();
@@ -115,7 +117,17 @@ function App() {
           mapType={mapType}
           windParticlesEnabled={windParticlesEnabled}
           selectedCity={selectedCity}
+          onSyncingChange={setIsSyncing}
+          customCoords={customCoords}
         />
+        {isSyncing && (
+          <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-1100 pointer-events-none">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-card/80 backdrop-blur-sm border border-border text-muted-foreground text-xs">
+              <Loader2 className="size-3 animate-spin" />
+              <span>Loading layer…</span>
+            </div>
+          </div>
+        )}
         {overlaysVisible ? <Legend config={config} /> : null}
 
         <BottomDrawer>

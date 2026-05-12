@@ -24,7 +24,7 @@ export const legendConfigMap: Record<MapLayerType, LegendConfig> = {
     min: "-65 °C",
     max: "30 °C",
     gradient:
-      "linear-gradient(to right, rgb(66, 21, 92), rgb(66, 21, 92), rgb(97, 32, 133), rgb(172, 52, 237), rgb(70, 30, 138), rgb(37, 99, 235), rgb(59, 130, 246), rgb(96, 165, 250), rgb(135, 206, 235), rgb(43, 130, 85), rgb(87, 138, 48), rgb(247, 216, 10), rgb(255, 189, 8), rgb(255, 148, 8), rgb(201, 73, 4), rgb(196, 46, 8), rgb(135, 23, 3), rgb(77, 15, 0), rgb(77, 15, 0))",
+      "linear-gradient(to right, #310052, #4b0082, #0000ff, #00ffff, #ffff00, #ff8c00, #ff0000, #8b0000)",
   },
   clouds_new: {
     label: "Clouds",
@@ -78,21 +78,22 @@ export const LAYER_CONFIG: Record<MapLayerType, LayerConfig> = {
     getColors: (d, units) => {
       const c = units === "imperial" ? (d.temp - 32) * (5 / 9) : d.temp;
       if (c <= -15) return { bg: "#6d28d9", glow: "rgba(109,40,217,0.55)" };
-      if (c <= -5)  return { bg: "#2563eb", glow: "rgba(37,99,235,0.55)" };
-      if (c <= 5)   return { bg: "#0ea5e9", glow: "rgba(14,165,233,0.55)" };
-      if (c <= 12)  return { bg: "#10b981", glow: "rgba(16,185,129,0.55)" };
-      if (c <= 20)  return { bg: "#f59e0b", glow: "rgba(245,158,11,0.55)" };
-      if (c <= 28)  return { bg: "#f97316", glow: "rgba(249,115,22,0.55)" };
+      if (c <= -5) return { bg: "#2563eb", glow: "rgba(37,99,235,0.55)" };
+      if (c <= 5) return { bg: "#0ea5e9", glow: "rgba(14,165,233,0.55)" };
+      if (c <= 12) return { bg: "#10b981", glow: "rgba(16,185,129,0.55)" };
+      if (c <= 20) return { bg: "#f59e0b", glow: "rgba(245,158,11,0.55)" };
+      if (c <= 28) return { bg: "#f97316", glow: "rgba(249,115,22,0.55)" };
       return { bg: "#ef4444", glow: "rgba(239,68,68,0.55)" };
     },
-    iconPaths: '<path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>',
+    iconPaths:
+      '<path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>',
   },
   pressure_new: {
     getValue: (d) => `${Math.round(d.pressure)} hPa`,
     getColors: (d) => {
       const p = d.pressure;
-      if (p < 960)  return { bg: "#0073ff", glow: "rgba(0,115,255,0.55)" };
-      if (p < 985)  return { bg: "#4bd0d6", glow: "rgba(75,208,214,0.55)" };
+      if (p < 960) return { bg: "#0073ff", glow: "rgba(0,115,255,0.55)" };
+      if (p < 985) return { bg: "#4bd0d6", glow: "rgba(75,208,214,0.55)" };
       if (p < 1000) return { bg: "#8de7c7", glow: "rgba(141,231,199,0.55)" };
       if (p < 1015) return { bg: "#f0b800", glow: "rgba(240,184,0,0.55)" };
       if (p < 1025) return { bg: "#fb5515", glow: "rgba(251,85,21,0.55)" };
@@ -104,8 +105,8 @@ export const LAYER_CONFIG: Record<MapLayerType, LayerConfig> = {
     getValue: (d, units) => formatWindSpeed(d.wind_speed, units),
     getColors: (d, units) => {
       const ms = units === "imperial" ? d.wind_speed / 2.237 : d.wind_speed;
-      if (ms < 2)  return { bg: "#b478c8", glow: "rgba(180,120,200,0.55)" };
-      if (ms < 7)  return { bg: "#7850a0", glow: "rgba(120,80,160,0.55)" };
+      if (ms < 2) return { bg: "#b478c8", glow: "rgba(180,120,200,0.55)" };
+      if (ms < 7) return { bg: "#7850a0", glow: "rgba(120,80,160,0.55)" };
       if (ms < 14) return { bg: "#462878", glow: "rgba(70,40,120,0.55)" };
       if (ms < 21) return { bg: "#1e1450", glow: "rgba(30,20,80,0.55)" };
       return { bg: "#0a0a28", glow: "rgba(10,10,40,0.55)" };
@@ -122,11 +123,11 @@ export const LAYER_CONFIG: Record<MapLayerType, LayerConfig> = {
     },
     getColors: (d) => {
       const mm = (d.rain?.["1h"] ?? 0) + (d.snow?.["1h"] ?? 0);
-      if (mm === 0)  return { bg: "#4b5563", glow: "rgba(75,85,99,0.45)" };
-      if (mm < 0.5)  return { bg: "#9696aa", glow: "rgba(150,150,170,0.55)" };
-      if (mm < 3)    return { bg: "#7878be", glow: "rgba(120,120,190,0.55)" };
-      if (mm < 8)    return { bg: "#5a5ad2", glow: "rgba(90,90,210,0.55)" };
-      if (mm < 20)   return { bg: "#3c3ce6", glow: "rgba(60,60,230,0.55)" };
+      if (mm === 0) return { bg: "#4b5563", glow: "rgba(75,85,99,0.45)" };
+      if (mm < 0.5) return { bg: "#9696aa", glow: "rgba(150,150,170,0.55)" };
+      if (mm < 3) return { bg: "#7878be", glow: "rgba(120,120,190,0.55)" };
+      if (mm < 8) return { bg: "#5a5ad2", glow: "rgba(90,90,210,0.55)" };
+      if (mm < 20) return { bg: "#3c3ce6", glow: "rgba(60,60,230,0.55)" };
       return { bg: "#1414ff", glow: "rgba(20,20,255,0.55)" };
     },
     iconPaths:
@@ -142,6 +143,7 @@ export const LAYER_CONFIG: Record<MapLayerType, LayerConfig> = {
       if (c < 80) return { bg: "#6b7280", glow: "rgba(107,114,128,0.5)" };
       return { bg: "#9ca3af", glow: "rgba(156,163,175,0.55)" };
     },
-    iconPaths: '<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>',
+    iconPaths:
+      '<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>',
   },
 };

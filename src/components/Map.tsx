@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Map, {
   Source,
   Layer,
   Marker,
   type MapMouseEvent,
   type MapRef,
+  type MapSourceDataEvent,
 } from "react-map-gl/maplibre";
+import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { Coords, CityResult, MapLayerType } from "../types";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
@@ -18,17 +20,47 @@ const API_KEY = import.meta.env.VITE_API_KEY;
 const MAPTILER_API_KEY = import.meta.env.VITE_MAP_TILER_KEY;
 const MAPTILER_STYLE = `https://api.maptiler.com/maps/backdrop-dark/style.json?key=${MAPTILER_API_KEY}`;
 
+const FADE_MS = 300;
+
 type Props = {
   coords: Coords;
+  customCoords: Coords | null;
   onMapClick: (lat: number, lon: number) => void;
   mapType: MapLayerType;
   windParticlesEnabled?: boolean;
   selectedCity: CityResult | null;
+  onSyncingChange?: (syncing: boolean) => void;
 };
 
 function buildTileUrl(mapType: MapLayerType, apiKey: string): string {
   return `https://tile.openweathermap.org/map/${mapType}/{z}/{x}/{y}.png?appid=${apiKey}`;
 }
+
+// Returns true when the destination is close enough that its tiles are likely
+// already loaded or will load within a frame or two. We expand the current
+// viewport by 1× in every direction (so a 2× box total) — anything inside
+// that region doesn't need a cinematic fade.
+function isNearby(map: maplibregl.Map, lat: number, lon: number): boolean {
+  const b = map.getBounds();
+  const latSpan = b.getNorth() - b.getSouth();
+  const lngSpan = b.getEast() - b.getWest();
+  return (
+    lat >= b.getSouth() - latSpan &&
+    lat <= b.getNorth() + latSpan &&
+    lon >= b.getWest() - lngSpan &&
+    lon <= b.getEast() + lngSpan
+  );
+}
+
+type SlotState = { url: string; opacity: number };
+
+const LAYER_PAINT = (opacity: number) =>
+  ({
+    "raster-opacity-transition": { duration: FADE_MS, delay: 0 },
+    "raster-opacity": opacity,
+    "raster-fade-duration": 300,
+    "raster-resampling": "linear",
+  }) as const;
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -38,80 +70,165 @@ export default function WeatherMap({
   mapType,
   windParticlesEnabled,
   selectedCity,
+  onSyncingChange,
 }: Props) {
   const mapRef = useRef<MapRef>(null);
   const lastFlownCoords = useRef<{ lat: number; lon: number } | null>(null);
+  const mapTypeRef = useRef<MapLayerType>(mapType);
+
+  // ── Double-buffer state ────────────────────────────────────────────────────
+  const [slotA, setSlotA] = useState<SlotState>({
+    url: buildTileUrl(mapType, API_KEY),
+    opacity: 0.7,
+  });
+  const [slotB, setSlotB] = useState<SlotState>({ url: "", opacity: 0 });
+
+  // Refs so event callbacks can read current values without stale closures
+  const activeSlotRef = useRef<"A" | "B">("A");
+  const pendingSlotRef = useRef<"A" | "B" | null>(null);
+  const transitioningRef = useRef(false);
+  const isSyncingRef = useRef(false);
+  const genRef = useRef(0); // incremented on each mapType change to cancel stale timeouts
+  const onSyncingRef = useRef(onSyncingChange);
+
+  // ── Fade-on-Flight refs ────────────────────────────────────────────────────
+  const flightGenRef = useRef(0); // incremented on each coords change
+  const waitingForIdleRef = useRef(false); // true while flyTo is in progress
 
   useEffect(() => {
+    onSyncingRef.current = onSyncingChange;
+  }, [onSyncingChange]);
+
+  useEffect(() => {
+    mapTypeRef.current = mapType;
+  }, [mapType]);
+
+  // ── Resize handler ─────────────────────────────────────────────────────────
+  useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
-
     const handleResize = () => {
-      // Clear the previous timer if the user is still dragging
       clearTimeout(timer);
-
-      // Wait 150ms after the last resize event to recalculate the canvas
-      timer = setTimeout(() => {
-        if (mapRef.current) {
-          // This resets the internal canvas resolution and fixes the stretch
-          mapRef.current.resize();
-        }
-      }, 150);
+      timer = setTimeout(() => mapRef.current?.resize(), 150);
     };
-
     window.addEventListener("resize", handleResize);
-
     return () => {
       window.removeEventListener("resize", handleResize);
       clearTimeout(timer);
     };
   }, []);
 
+  // ── Mount hidden pending slot when mapType changes ─────────────────────────
+  const prevMapTypeRef = useRef(mapType);
+  useEffect(() => {
+    if (mapType === prevMapTypeRef.current) return;
+    prevMapTypeRef.current = mapType;
+
+    const active = activeSlotRef.current;
+    const pending: "A" | "B" = active === "A" ? "B" : "A";
+
+    // Cancel any in-flight transition for the previous type
+    pendingSlotRef.current = pending;
+    transitioningRef.current = false;
+    genRef.current++;
+
+    isSyncingRef.current = true;
+    onSyncingRef.current?.(true);
+
+    const newUrl = buildTileUrl(mapType, API_KEY);
+    if (pending === "A") setSlotA({ url: newUrl, opacity: 0 });
+    else setSlotB({ url: newUrl, opacity: 0 });
+  }, [mapType]);
+
+  // ── Cross-fade when pending source reports loaded ──────────────────────────
+  const handleSourceData = useCallback((e: MapSourceDataEvent) => {
+    if (!e.isSourceLoaded || transitioningRef.current || !isSyncingRef.current)
+      return;
+    const pending = pendingSlotRef.current;
+    if (!pending || e.sourceId !== `weather-source-${pending}`) return;
+
+    transitioningRef.current = true;
+    const active = activeSlotRef.current;
+    const gen = genRef.current;
+
+    // Brief pause so initial tiles have time to arrive before the old layer fades
+    setTimeout(() => {
+      if (genRef.current !== gen) return; // mapType changed again — abort
+
+      if (pending === "A") {
+        setSlotA((s) => ({ ...s, opacity: 0.7 }));
+        setSlotB((s) => ({ ...s, opacity: 0 }));
+      } else {
+        setSlotB((s) => ({ ...s, opacity: 0.7 }));
+        setSlotA((s) => ({ ...s, opacity: 0 }));
+      }
+
+      // After the CSS transition finishes, tear down the old slot
+      setTimeout(() => {
+        if (genRef.current !== gen) return;
+
+        activeSlotRef.current = pending;
+        pendingSlotRef.current = null;
+
+        // Unmount old source to free GPU memory
+        if (active === "A") setSlotA({ url: "", opacity: 0 });
+        else setSlotB({ url: "", opacity: 0 });
+
+        isSyncingRef.current = false;
+        onSyncingRef.current?.(false);
+        transitioningRef.current = false;
+      }, FADE_MS + 50);
+    }, 300);
+  }, []);
+
+  // ── Fade-on-Flight: fade → flyTo → idle → fade back ──────────────────────
   useEffect(() => {
     if (
-      coords.lat !== lastFlownCoords.current?.lat ||
-      coords.lon !== lastFlownCoords.current?.lon
-    ) {
+      coords.lat === lastFlownCoords.current?.lat &&
+      coords.lon === lastFlownCoords.current?.lon
+    )
+      return;
+
+    lastFlownCoords.current = { lat: coords.lat, lon: coords.lon };
+
+    flightGenRef.current++;
+    const gen = flightGenRef.current;
+    waitingForIdleRef.current = false;
+
+    const map = mapRef.current?.getMap();
+    const nearby = map ? isNearby(map, coords.lat, coords.lon) : true;
+
+    const doFly = () => {
+      if (flightGenRef.current !== gen) return;
       mapRef.current?.flyTo({
         center: [coords.lon, coords.lat],
-        duration: 3000,
+        duration: 4000,
+        zoom: 5,
         essential: true,
       });
-      // Update the ref so we don't fly again on the next re-render
-      lastFlownCoords.current = { lat: coords.lat, lon: coords.lon };
+      if (!nearby) waitingForIdleRef.current = true;
+    };
+
+    if (nearby) {
+      // Destination tiles are already in view or cache — fly straight away, no fade.
+      doFly();
+    } else {
+      // Destination is far: dim the layer so blank tiles during travel are invisible.
+      const active = activeSlotRef.current;
+      if (active === "A") setSlotA((s) => ({ ...s, opacity: 0 }));
+      else setSlotB((s) => ({ ...s, opacity: 0 }));
+      setTimeout(doFly, 0);
     }
   }, [coords]);
 
-  const tileUrl = useMemo(() => buildTileUrl(mapType, API_KEY), [mapType]);
+  // Step 3: idle fires when camera has stopped AND all viewport tiles are loaded
+  const handleIdle = useCallback(() => {
+    if (!waitingForIdleRef.current) return;
+    waitingForIdleRef.current = false;
 
-  // Weather Layer
-  const WeatherLayer = useMemo(
-    () => (
-      <Source
-        id="weather-source"
-        type="raster"
-        tiles={[tileUrl]}
-        tileSize={256}
-        minzoom={0}
-        maxzoom={12} // Allow the map to upscale tiles beyond level 10
-        volatile={true}
-      >
-        <Layer
-          id="weather-layer"
-          type="raster"
-          paint={{
-            "raster-opacity": 0.7,
-            "raster-fade-duration": 400, // Smoother transition
-            "raster-resampling": "linear", // Keeps it from looking pixelated when upscaling
-          }}
-        />
-      </Source>
-    ),
-    [tileUrl],
-  ); // Only rebuilds if the layer type/URL changes
-
-  const handleMapClick = (e: MapMouseEvent) => {
-    onMapClick(e.lngLat.lat, e.lngLat.lng);
-  };
+    const active = activeSlotRef.current;
+    if (active === "A") setSlotA((s) => ({ ...s, opacity: 0.7 }));
+    else setSlotB((s) => ({ ...s, opacity: 0.7 }));
+  }, []);
 
   return (
     <Map
@@ -126,16 +243,52 @@ export default function WeatherMap({
       minZoom={1}
       maxZoom={10}
       reuseMaps
-      localIdeographFontFamily={"sans-serif"}
+      localIdeographFontFamily="sans-serif"
       collectResourceTiming={false}
       trackResize={false}
       style={{ width: "100%", height: "100vh" }}
-      onClick={handleMapClick}
+      onClick={(e: MapMouseEvent) => onMapClick(e.lngLat.lat, e.lngLat.lng)}
       maxTileCacheSize={500}
       fadeDuration={500}
       refreshExpiredTiles={false}
+      onSourceData={handleSourceData}
+      onIdle={handleIdle}
     >
-      {WeatherLayer}
+      {/* Buffer A */}
+      {slotA.url && (
+        <Source
+          id="weather-source-A"
+          type="raster"
+          tiles={[slotA.url]}
+          tileSize={256}
+          minzoom={0}
+          maxzoom={12}
+        >
+          <Layer
+            id="weather-layer-A"
+            type="raster"
+            paint={LAYER_PAINT(slotA.opacity)}
+          />
+        </Source>
+      )}
+
+      {/* Buffer B */}
+      {slotB.url && (
+        <Source
+          id="weather-source-B"
+          type="raster"
+          tiles={[slotB.url]}
+          tileSize={256}
+          minzoom={0}
+          maxzoom={12}
+        >
+          <Layer
+            id="weather-layer-B"
+            type="raster"
+            paint={LAYER_PAINT(slotB.opacity)}
+          />
+        </Source>
+      )}
 
       <CustomMarker
         coords={coords}
