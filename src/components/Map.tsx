@@ -13,6 +13,7 @@ import type { Coords, CityResult, MapLayerType } from "../types";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { getWeather, reverseGeocode } from "../api";
 import { useUnits } from "../hooks/useUnits";
+import { useWindAtPoint } from "../hooks/useWindAtPoint";
 import { LAYER_CONFIG } from "../lib/consts";
 import { WindParticlesLayer } from "./WindParticles";
 import { WindPoiLayer } from "./WindPoiLayer";
@@ -338,6 +339,7 @@ function CustomMarker({
   selectedTime: number;
 }) {
   const { units } = useUnits();
+  const omWind = useWindAtPoint(coords, units);
 
   const { data: pinnedCity } = useQuery({
     queryKey: ["reverseGeocode", coords.lat, coords.lon],
@@ -437,6 +439,26 @@ function CustomMarker({
               dangerouslySetInnerHTML={{ __html: cfg.iconPaths }}
             />
             <span>{value}</span>
+            {mapType === "wind_new" && display && (
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 12 12"
+                style={{
+                  transform: `rotate(${(((selectedTime === 0 ? omWind?.wind_deg : null) ?? display.wind_deg) + 180) % 360}deg)`,
+                  flexShrink: 0,
+                }}
+              >
+                <path
+                  d="M6 1 L6 10 M3.5 3.5 L6 1 L8.5 3.5"
+                  stroke="rgba(255,255,255,0.9)"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                />
+              </svg>
+            )}
           </div>
         </div>
 
