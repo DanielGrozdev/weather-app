@@ -15,6 +15,7 @@ import { getWeather, reverseGeocode } from "../api";
 import { useUnits } from "../hooks/useUnits";
 import { LAYER_CONFIG } from "../lib/consts";
 import { WindParticlesLayer } from "./WindParticles";
+import { WindPoiLayer } from "./WindPoiLayer";
 
 const API_KEY = import.meta.env.VITE_API_KEY;
 const MAPTILER_API_KEY = import.meta.env.VITE_MAP_TILER_KEY;
@@ -315,6 +316,8 @@ export default function WeatherMap({
         selectedCity={selectedCity}
         selectedTime={selectedTime}
       />
+
+      {mapType === "wind_new" && <WindPoiLayer />}
 
       <WindParticlesLayer enabled={windParticlesEnabled} coords={coords} />
     </Map>
