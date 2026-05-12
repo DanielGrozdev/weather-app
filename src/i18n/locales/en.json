@@ -30,6 +30,7 @@
   },
   "timeScrubber": {
     "label": "Time slider",
+    "live": "Live",
     "stepBack": "Step back",
     "stepForward": "Step forward",
     "play": "Play",

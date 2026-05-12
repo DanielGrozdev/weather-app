@@ -13,6 +13,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useUnits } from "./hooks/useUnits";
 import { useTranslation } from "react-i18next";
 import LanguageSwitcher from "./components/LanguageSwitcher";
+import TimeScrubber from "./components/TimeScrubber";
 import Logo from "./assets/logo.svg";
 
 function App() {
@@ -28,6 +29,8 @@ function App() {
     overlaysVisible,
     toggleOverlays,
     customCoords,
+    selectedTime,
+    setSelectedTime,
   } = useWeatherApp();
 
   const { units, toggle: toggleUnits } = useUnits();
@@ -106,7 +109,7 @@ function App() {
               />
             </div>
             <div className="absolute right-3 top-24 z-1100">
-              <WeatherOverlay coords={coords} selectedCity={selectedCity} />
+              <WeatherOverlay coords={coords} selectedCity={selectedCity} selectedTime={selectedTime} />
             </div>
           </>
         ) : null}
@@ -115,10 +118,11 @@ function App() {
           coords={coords}
           onMapClick={onMapClick}
           mapType={mapType}
-          windParticlesEnabled={windParticlesEnabled}
+          windParticlesEnabled={windParticlesEnabled && selectedTime === 0}
           selectedCity={selectedCity}
           onSyncingChange={setIsSyncing}
           customCoords={customCoords}
+          selectedTime={selectedTime}
         />
         {isSyncing && (
           <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-1100 pointer-events-none">
@@ -129,6 +133,16 @@ function App() {
           </div>
         )}
         {overlaysVisible ? <Legend config={config} /> : null}
+
+        {/* Time scrubber */}
+        {overlaysVisible && (
+          <div className="absolute bottom-0 left-0 w-[300px] ml-4 mb-14">
+            <TimeScrubber
+              selectedTime={selectedTime}
+              onChange={setSelectedTime}
+            />
+          </div>
+        )}
 
         <BottomDrawer>
           <ForecastDrawer coords={coords} />

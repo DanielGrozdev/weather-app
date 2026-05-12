@@ -30,6 +30,7 @@
   },
   "timeScrubber": {
     "label": "Времева лента",
+    "live": "На живо",
     "stepBack": "Стъпка назад",
     "stepForward": "Стъпка напред",
     "play": "Пусни",

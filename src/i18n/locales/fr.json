@@ -30,6 +30,7 @@
   },
   "timeScrubber": {
     "label": "Curseur temporel",
+    "live": "En direct",
     "stepBack": "Reculer",
     "stepForward": "Avancer",
     "play": "Lecture",

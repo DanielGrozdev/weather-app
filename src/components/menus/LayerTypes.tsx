@@ -69,13 +69,13 @@ export default function LayerTypes({
           className={[
             "relative w-12 h-7 rounded-full border-2 transition-colors",
             windParticlesEnabled
-              ? "bg-primary/90 border-primary"
-              : "bg-muted/50 border-muted-foreground/40",
+              ? "bg-muted border-primary"
+              : "bg-muted border-muted-foreground",
           ].join(" ")}
         >
           <span
             className={[
-              "absolute top-0.5 left-0.5 size-5 rounded-full bg-background shadow transition-transform",
+              "absolute top-0.5 left-0.5 size-5 rounded-full bg-primary shadow transition-transform",
               windParticlesEnabled ? "translate-x-5" : "translate-x-0",
             ].join(" ")}
           />

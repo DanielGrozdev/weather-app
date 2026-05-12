@@ -14,6 +14,8 @@ export function useWeatherApp() {
   const [mapType, setMapType] = useState<MapLayerType>("temp_new");
   const [windParticlesEnabled, setWindParticlesEnabled] = useState(false);
   const [overlaysVisible, setOverlaysVisible] = useState(true);
+  // 0 = live/current; any other value = Unix timestamp for a forecast step
+  const [selectedTime, setSelectedTime] = useState(0);
 
   const selectCity = useCallback((city: CityResult) => {
     setSelectedCity(city);
@@ -52,5 +54,7 @@ export function useWeatherApp() {
     setWindParticlesEnabled,
     overlaysVisible,
     toggleOverlays,
+    selectedTime,
+    setSelectedTime,
   };
 }

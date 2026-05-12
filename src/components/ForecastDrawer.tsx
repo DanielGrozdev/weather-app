@@ -218,7 +218,8 @@ export default function ForecastDrawer({ coords }: Props) {
         dt: h.dt,
         time: new Date(h.dt * 1000).toLocaleTimeString(i18n.language, {
           hour: "numeric",
-          hour12: true,
+          minute: "numeric",
+          hour12: false,
         }),
         temp: h.temp,
         icon: h.weather[0].icon,

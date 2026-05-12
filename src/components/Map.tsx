@@ -30,10 +30,13 @@ type Props = {
   windParticlesEnabled?: boolean;
   selectedCity: CityResult | null;
   onSyncingChange?: (syncing: boolean) => void;
+  selectedTime?: number; // 0 or absent = live; Unix timestamp = forecast step
 };
 
-function buildTileUrl(mapType: MapLayerType, apiKey: string): string {
-  return `https://tile.openweathermap.org/map/${mapType}/{z}/{x}/{y}.png?appid=${apiKey}`;
+// time > 0 appends &date= so OWM serves the forecast raster for that timestamp.
+function buildTileUrl(mapType: MapLayerType, apiKey: string, time = 0): string {
+  const base = `https://tile.openweathermap.org/map/${mapType}/{z}/{x}/{y}.png?appid=${apiKey}`;
+  return time > 0 ? `${base}&date=${time}` : base;
 }
 
 // Returns true when the destination is close enough that its tiles are likely
@@ -71,15 +74,19 @@ export default function WeatherMap({
   windParticlesEnabled,
   selectedCity,
   onSyncingChange,
+  selectedTime = 0,
 }: Props) {
   const mapRef = useRef<MapRef>(null);
   // Pre-seed with initial coords so the flight effect skips on first mount
   const lastFlownCoords = useRef({ lat: coords.lat, lon: coords.lon });
   const mapTypeRef = useRef<MapLayerType>(mapType);
 
+  // Derived tile URL — changes when either mapType or selectedTime changes.
+  const tileUrl = buildTileUrl(mapType, API_KEY, selectedTime);
+
   // ── Double-buffer state ────────────────────────────────────────────────────
   const [slotA, setSlotA] = useState<SlotState>({
-    url: buildTileUrl(mapType, API_KEY),
+    url: buildTileUrl(mapType, API_KEY, 0), // initial: live tiles
     opacity: 0, // starts invisible; handleIdle fades it in on first load
   });
   const [slotB, setSlotB] = useState<SlotState>({ url: "", opacity: 0 });
@@ -119,16 +126,15 @@ export default function WeatherMap({
     };
   }, []);
 
-  // ── Mount hidden pending slot when mapType changes ─────────────────────────
-  const prevMapTypeRef = useRef(mapType);
+  // ── Mount hidden pending slot when tileUrl changes (mapType or time) ────────
+  const prevTileUrlRef = useRef(tileUrl);
   useEffect(() => {
-    if (mapType === prevMapTypeRef.current) return;
-    prevMapTypeRef.current = mapType;
+    if (tileUrl === prevTileUrlRef.current) return;
+    prevTileUrlRef.current = tileUrl;
 
     const active = activeSlotRef.current;
     const pending: "A" | "B" = active === "A" ? "B" : "A";
 
-    // Cancel any in-flight transition for the previous type
     pendingSlotRef.current = pending;
     transitioningRef.current = false;
     genRef.current++;
@@ -136,10 +142,9 @@ export default function WeatherMap({
     isSyncingRef.current = true;
     onSyncingRef.current?.(true);
 
-    const newUrl = buildTileUrl(mapType, API_KEY);
-    if (pending === "A") setSlotA({ url: newUrl, opacity: 0 });
-    else setSlotB({ url: newUrl, opacity: 0 });
-  }, [mapType]);
+    if (pending === "A") setSlotA({ url: tileUrl, opacity: 0 });
+    else setSlotB({ url: tileUrl, opacity: 0 });
+  }, [tileUrl]);
 
   // ── Cross-fade when pending source reports loaded ──────────────────────────
   const handleSourceData = useCallback((e: MapSourceDataEvent) => {
@@ -157,10 +162,10 @@ export default function WeatherMap({
       if (genRef.current !== gen) return; // mapType changed again — abort
 
       if (pending === "A") {
-        setSlotA((s) => ({ ...s, opacity: 0.7 }));
+        setSlotA((s) => ({ ...s, opacity: 1 }));
         setSlotB((s) => ({ ...s, opacity: 0 }));
       } else {
-        setSlotB((s) => ({ ...s, opacity: 0.7 }));
+        setSlotB((s) => ({ ...s, opacity: 1 }));
         setSlotA((s) => ({ ...s, opacity: 0 }));
       }
 
@@ -227,8 +232,8 @@ export default function WeatherMap({
   const handleIdle = useCallback(() => {
     const active = activeSlotRef.current;
     const fadeIn = () => {
-      if (active === "A") setSlotA((s) => ({ ...s, opacity: 0.7 }));
-      else setSlotB((s) => ({ ...s, opacity: 0.7 }));
+      if (active === "A") setSlotA((s) => ({ ...s, opacity: 1 }));
+      else setSlotB((s) => ({ ...s, opacity: 1 }));
     };
 
     // Always fade in on the very first idle (initial page load).
@@ -308,6 +313,7 @@ export default function WeatherMap({
         coords={coords}
         mapType={mapType}
         selectedCity={selectedCity}
+        selectedTime={selectedTime}
       />
 
       <WindParticlesLayer enabled={windParticlesEnabled} coords={coords} />
@@ -321,10 +327,12 @@ function CustomMarker({
   coords,
   mapType,
   selectedCity,
+  selectedTime,
 }: {
   coords: Coords;
   mapType: MapLayerType;
   selectedCity: CityResult | null;
+  selectedTime: number;
 }) {
   const { units } = useUnits();
 
@@ -344,7 +352,16 @@ function CustomMarker({
 
   const cfg = LAYER_CONFIG[mapType];
 
-  const display = data?.current ?? null;
+  // When a forecast time is selected, find the closest hourly entry so the
+  // marker value and colour match what the tile layer is showing.
+  const display = useMemo(() => {
+    if (!data) return null;
+    if (!selectedTime || !data.hourly.length) return data.current;
+    return data.hourly.reduce((best, h) =>
+      Math.abs(h.dt - selectedTime) < Math.abs(best.dt - selectedTime) ? h : best,
+    );
+  }, [data, selectedTime]);
+
   const value = display ? cfg.getValue(display, units) : "–";
   const colors = display
     ? cfg.getColors(display, units)

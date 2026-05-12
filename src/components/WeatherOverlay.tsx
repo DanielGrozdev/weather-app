@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ChevronDown } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { getWeather, reverseGeocode } from "../api";
 import { useWindAtPoint } from "../hooks/useWindAtPoint";
 import { useUnits } from "../hooks/useUnits";
@@ -13,6 +13,7 @@ import { useTranslation } from "react-i18next";
 type Props = {
   coords: Coords;
   selectedCity: CityResult | null;
+  selectedTime: number;
   className?: string;
 };
 
@@ -30,7 +31,7 @@ function formatCoords(coords: Coords) {
   return `${coords.lat.toFixed(2)}, ${coords.lon.toFixed(2)}`;
 }
 
-export default function WeatherOverlay({ coords, selectedCity }: Props) {
+export default function WeatherOverlay({ coords, selectedCity, selectedTime }: Props) {
   const { units } = useUnits();
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(true);
@@ -51,7 +52,14 @@ export default function WeatherOverlay({ coords, selectedCity }: Props) {
 
   const omWind = useWindAtPoint(coords, units);
 
-  const display = data?.current ?? null;
+  const display = useMemo(() => {
+    if (!data) return null;
+    if (selectedTime === 0) return data.current;
+    // Find the hourly slot closest to the selected forecast timestamp
+    return data.hourly.reduce((best, h) =>
+      Math.abs(h.dt - selectedTime) < Math.abs(best.dt - selectedTime) ? h : best,
+    );
+  }, [data, selectedTime]);
 
   return (
     <div className="rounded-2xl min-w-70 border border-border bg-card/60 backdrop-blur-md shadow-2xl text-foreground overflow-hidden">
@@ -140,7 +148,7 @@ export default function WeatherOverlay({ coords, selectedCity }: Props) {
               {
                 label: t("overlay.windSpeed"),
                 value: formatWindSpeed(
-                  omWind?.wind_speed ?? display.wind_speed,
+                  (selectedTime === 0 ? omWind?.wind_speed : null) ?? display.wind_speed,
                   units,
                 ),
               },
@@ -149,7 +157,7 @@ export default function WeatherOverlay({ coords, selectedCity }: Props) {
                 value: (
                   <UpArrow
                     style={{
-                      transform: `rotate(${((omWind?.wind_deg ?? display.wind_deg) + 180) % 360}deg)`,
+                      transform: `rotate(${(((selectedTime === 0 ? omWind?.wind_deg : null) ?? display.wind_deg) + 180) % 360}deg)`,
                     }}
                     className="size-5 opacity-90"
                   />
