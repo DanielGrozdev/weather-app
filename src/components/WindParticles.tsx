@@ -3,7 +3,7 @@
  */
 
 import { useEffect, useRef } from "react";
-import { useMap } from "react-map-gl/maplibre";
+import { useMap, type MapRef } from "react-map-gl/maplibre";
 import { useQuery } from "@tanstack/react-query";
 import { fetchWindGrid, sampleGrid, type WindGrid } from "../lib/windGrid";
 
@@ -56,7 +56,7 @@ function speedColor(spd: number): string {
   return `rgb(213,62,79)`;
 }
 
-function getViewport(map): Rect {
+function getViewport(map: MapRef): Rect {
   const b = map.getBounds();
   const minLon = b.getWest();
   let maxLon = b.getEast();

@@ -22,7 +22,11 @@ export default function LayerTypes({
     { value: "temp_new", labelKey: "layers.temperature", Icon: Thermometer },
     { value: "pressure_new", labelKey: "layers.pressure", Icon: Gauge },
     { value: "wind_new", labelKey: "layers.windSpeed", Icon: Wind },
-    { value: "precipitation_new", labelKey: "layers.precipitation", Icon: Droplets },
+    {
+      value: "precipitation_new",
+      labelKey: "layers.precipitation",
+      Icon: Droplets,
+    },
     { value: "clouds_new", labelKey: "layers.clouds", Icon: Cloud },
   ];
 
@@ -36,7 +40,7 @@ export default function LayerTypes({
             <button
               key={item.value}
               type="button"
-              onClick={() => setMapType(item.value)}
+              onClick={() => setMapType(item.value as MapLayerType)}
               className={[
                 "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl",
                 "text-sm transition-colors",
@@ -55,7 +59,9 @@ export default function LayerTypes({
       <div className="h-px bg-border/70" />
 
       <div className="p-3 flex items-center justify-between gap-3">
-        <div className="text-sm text-muted-foreground">{t("layers.windParticles")}</div>
+        <div className="text-sm text-muted-foreground">
+          {t("layers.windParticles")}
+        </div>
         <button
           type="button"
           role="switch"
@@ -79,4 +85,3 @@ export default function LayerTypes({
     </div>
   );
 }
-

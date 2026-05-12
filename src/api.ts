@@ -1,4 +1,4 @@
-import type { Units } from "./context/units-context";
+import type { Units } from "./context/UnitsContext";
 
 /**
  * Fetch current wind speed + direction from Open-Meteo for a single point.

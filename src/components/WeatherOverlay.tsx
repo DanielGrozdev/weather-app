@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ChevronDown } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { getWeather, reverseGeocode } from "../api";
 import { useWindAtPoint } from "../hooks/useWindAtPoint";
 import { useUnits } from "../hooks/useUnits";
@@ -72,7 +72,9 @@ export default function WeatherOverlay({ coords, selectedCity }: Props) {
           {isFetching ? (
             <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1 shrink-0">
               <span className="inline-block size-2 rounded-full bg-sky-400/80 animate-pulse" />
-              <span className="hidden sm:inline">{t("overlay.refreshing")}</span>
+              <span className="hidden sm:inline">
+                {t("overlay.refreshing")}
+              </span>
             </div>
           ) : null}
         </div>
@@ -91,16 +93,22 @@ export default function WeatherOverlay({ coords, selectedCity }: Props) {
                 <div className="flex flex-col text-4xl font-semibold">
                   <span>{formatTemp(display.temp, units)}</span>
                   <span className="text-sm font-light">
-                    {t("overlay.feelsLike")} {formatTemp(display.feels_like, units)}
+                    {t("overlay.feelsLike")}{" "}
+                    {formatTemp(display.feels_like, units)}
                   </span>
                 </div>
               </div>
-              <WeatherIcon src={display.weather[0].icon} className="size-8 shrink-0" />
+              <WeatherIcon
+                src={display.weather[0].icon}
+                className="size-8 shrink-0"
+              />
             </div>
 
             <button
               type="button"
-              aria-label={t(expanded ? "overlay.collapseDetails" : "overlay.expandDetails")}
+              aria-label={t(
+                expanded ? "overlay.collapseDetails" : "overlay.expandDetails",
+              )}
               onClick={() => setExpanded((v) => !v)}
               className={[
                 "size-9 rounded-full grid place-items-center",
@@ -125,10 +133,16 @@ export default function WeatherOverlay({ coords, selectedCity }: Props) {
           <div className="h-px bg-border/70 mb-3" />
           <div className="space-y-2.5 text-sm">
             {[
-              { label: t("overlay.feelsLike"), value: formatTemp(display.feels_like, units) },
+              {
+                label: t("overlay.feelsLike"),
+                value: formatTemp(display.feels_like, units),
+              },
               {
                 label: t("overlay.windSpeed"),
-                value: formatWindSpeed(omWind?.wind_speed ?? display.wind_speed, units),
+                value: formatWindSpeed(
+                  omWind?.wind_speed ?? display.wind_speed,
+                  units,
+                ),
               },
               {
                 label: t("overlay.windDirection"),
@@ -141,11 +155,23 @@ export default function WeatherOverlay({ coords, selectedCity }: Props) {
                   />
                 ),
               },
-              { label: t("overlay.humidity"),  value: `${Math.round(display.humidity)} %` },
-              { label: t("overlay.clouds"),    value: `${Math.round(display.clouds)} %` },
-              { label: t("overlay.pressure"),  value: `${Math.round(display.pressure)} hPa` },
+              {
+                label: t("overlay.humidity"),
+                value: `${Math.round(display.humidity)} %`,
+              },
+              {
+                label: t("overlay.clouds"),
+                value: `${Math.round(display.clouds)} %`,
+              },
+              {
+                label: t("overlay.pressure"),
+                value: `${Math.round(display.pressure)} hPa`,
+              },
             ].map((row) => (
-              <div key={row.label} className="flex items-center justify-between">
+              <div
+                key={row.label}
+                className="flex items-center justify-between"
+              >
                 <span className="text-muted-foreground">{row.label}</span>
                 <span className="font-medium">{row.value}</span>
               </div>
