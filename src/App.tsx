@@ -1,3 +1,4 @@
+import { prewarm } from "maplibre-gl";
 import Map from "./components/Map";
 import LayerTypes from "./components/menus/LayerTypes";
 import CitySearch from "./components/search/CitySearch";
@@ -8,7 +9,7 @@ import WeatherOverlay from "./components/WeatherOverlay";
 import BottomDrawer from "./components/BottomDrawer";
 import ForecastDrawer from "./components/ForecastDrawer";
 import { Eye, EyeOff } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useUnits } from "./hooks/useUnits";
 import { useTranslation } from "react-i18next";
 import LanguageSwitcher from "./components/LanguageSwitcher";
@@ -28,10 +29,13 @@ function App() {
     toggleOverlays,
   } = useWeatherApp();
 
-
   const { units, toggle: toggleUnits } = useUnits();
   const { t } = useTranslation();
   const config = useMemo(() => legendConfigMap[mapType], [mapType]);
+
+  useEffect(() => {
+    prewarm();
+  }, []);
 
   return (
     <div className="flex flex-col gap-8">
@@ -100,10 +104,7 @@ function App() {
               />
             </div>
             <div className="absolute right-3 top-24 z-1100">
-              <WeatherOverlay
-                coords={coords}
-                selectedCity={selectedCity}
-              />
+              <WeatherOverlay coords={coords} selectedCity={selectedCity} />
             </div>
           </>
         ) : null}

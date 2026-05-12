@@ -1,56 +1,49 @@
 /**
- * WindParticlesLayer — vector-field particle visualisation
- *
- * Grid source : Open-Meteo ECMWF IFS 0.25° — 8×8 points, city-centred, fetched ONCE per session
- * Interpolation: bilinear from the 4 surrounding grid cells
- * Particles    : PARTICLE_COUNT points in geographic (lat/lon) space
- * Render loop  : rAF canvas overlay on the MapLibre container
+ * WindParticlesLayer — Fixed for Date Line wrapping and Mercator visual speed consistency.
  */
 
 import { useEffect, useRef } from "react";
 import { useMap } from "react-map-gl/maplibre";
 import { useQuery } from "@tanstack/react-query";
-import {
-  cityBoundsFor,
-  citySnapFor,
-  fetchWindGrid,
-  sampleGrid,
-  type BoundsRect,
-  type WindGrid,
-} from "../lib/windGrid";
+import { fetchWindGrid, sampleGrid, type WindGrid } from "../lib/windGrid";
 
-// ─── Particle type ────────────────────────────────────────────────────────────
+// ── Types ──────────────────────────────────────────────────────────────────────
 
 type Particle = {
-  lat: number;
-  lon: number;
-  prevLat: number;
-  prevLon: number;
+  trail: Array<[number, number]>;
   age: number;
   maxAge: number;
   speedMult: number;
 };
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+type Rect = { minLat: number; maxLat: number; minLon: number; maxLon: number };
 
-const PARTICLE_COUNT = 500;
-const DT_BASE = 300;
+// ── Constants ──────────────────────────────────────────────────────────────────
+
+const PARTICLE_COUNT = 1000;
+const TRAIL_LENGTH = 12;
+const SPEED_SCALE = 18_000;
 const BASE_ZOOM = 6;
-const MARGIN_PX = 60;
+const MIN_LIFE_MS = 900;
+const MAX_LIFE_MS = 2200;
+const MARGIN_PX = 80;
 
-// ─── Windy-inspired speed colormap ───────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+/** Normalizes longitude to [-180, 180] */
+const wrapLon = (lon: number) => ((((lon + 180) % 360) + 360) % 360) - 180;
 
 const COLOR_STOPS: [number, number, number, number][] = [
-  [  0,  50, 136, 189 ],
-  [  5, 102, 194, 165 ],
-  [ 10, 171, 221, 164 ],
-  [ 15, 230, 245, 152 ],
-  [ 20, 254, 224, 139 ],
-  [ 25, 253, 174,  97 ],
-  [ 30, 213,  62,  79 ],
+  [0, 50, 136, 189],
+  [5, 102, 194, 165],
+  [10, 171, 221, 164],
+  [15, 230, 245, 152],
+  [20, 254, 224, 139],
+  [25, 253, 174, 97],
+  [30, 213, 62, 79],
 ];
 
-function windSpeedColor(spd: number): string {
+function speedColor(spd: number): string {
   const s = Math.max(0, Math.min(30, spd));
   for (let i = 0; i < COLOR_STOPS.length - 1; i++) {
     const [s0, r0, g0, b0] = COLOR_STOPS[i];
@@ -63,179 +56,183 @@ function windSpeedColor(spd: number): string {
   return `rgb(213,62,79)`;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getViewportBounds(map: any): BoundsRect {
+function getViewport(map): Rect {
   const b = map.getBounds();
+  const minLon = b.getWest();
+  let maxLon = b.getEast();
+
+  // Handle crossing the Date Line so random spawning works
+  if (maxLon < minLon) maxLon += 360;
+
   return {
     minLat: b.getSouth(),
     maxLat: b.getNorth(),
-    minLon: b.getWest(),
-    maxLon: b.getEast(),
+    minLon,
+    maxLon,
   };
 }
 
-function spawnParticle(b: BoundsRect, preAge = false): Particle {
-  const lat = b.minLat + Math.random() * (b.maxLat - b.minLat);
-  const lon = b.minLon + Math.random() * (b.maxLon - b.minLon);
-  const maxAge = 50 + Math.random() * 60;
+function spawnParticle(r: Rect, preAge = false): Particle {
+  const lat = r.minLat + Math.random() * (r.maxLat - r.minLat);
+  const lon = r.minLon + Math.random() * (r.maxLon - r.minLon);
+  const maxAge = MIN_LIFE_MS + Math.random() * (MAX_LIFE_MS - MIN_LIFE_MS);
   return {
-    lat, lon, prevLat: lat, prevLon: lon,
+    trail: [[lat, lon]],
     age: preAge ? Math.random() * maxAge : 0,
     maxAge,
-    speedMult: 0.75 + Math.random() * 0.3,
+    speedMult: 0.75 + Math.random() * 0.5,
   };
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
-
-type Coords = { lat: number; lon: number };
+// ── Component ──────────────────────────────────────────────────────────────────
 
 export function WindParticlesLayer({
   enabled,
-  coords,
 }: {
   enabled?: boolean;
-  coords?: Coords;
+  coords?: { lat: number; lon: number };
 }) {
-  // useMap() from react-map-gl — works because this component renders inside <Map>
   const { current: map } = useMap();
 
-  // ── Grid fetch — locked to first valid coords, never changes ─────────────
-  // Recomputing snap from coords on every render would produce a new query key
-  // on every click, fetching a new grid and changing wind direction. Instead we
-  // lock the snap on the first render where enabled + coords are both truthy,
-  // so the same grid is reused for the entire session regardless of map interaction.
-
-  const lockedSnapRef = useRef<{ lat: number; lon: number } | null>(null);
-  if (enabled && coords && !lockedSnapRef.current) {
-    lockedSnapRef.current = citySnapFor(coords.lat, coords.lon);
-  }
-  const snap = lockedSnapRef.current;
-  const bounds = snap ? cityBoundsFor(snap.lat, snap.lon) : null;
-
   const { data: grid } = useQuery({
-    queryKey: snap ? ["windGrid", snap.lat, snap.lon] : ["windGrid", "disabled"],
-    queryFn: () => fetchWindGrid(bounds!),
-    staleTime: 30 * 60 * 1000, // re-fetch after 30 minutes
-    gcTime: Infinity,
-    enabled: !!enabled && !!snap,
+    queryKey: ["windGrid", "global"],
+    queryFn: fetchWindGrid,
+    staleTime: Infinity,
+    enabled: !!enabled,
   });
 
   const gridRef = useRef<WindGrid | null>(null);
+  const particlesRef = useRef<Particle[]>([]);
+
   useEffect(() => {
     if (grid) gridRef.current = grid;
   }, [grid]);
-
-  // ── Particle arrays and canvas ref ───────────────────────────────────────
-
-  const particlesRef = useRef<Particle[]>([]);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  // ── Render loop ───────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!enabled || !map) return;
 
     const container = map.getContainer();
-    const { width: cw, height: ch } = container.getBoundingClientRect();
-    const W = cw || 800;
-    const H = ch || 600;
+    const { width: cssW, height: cssH } = container.getBoundingClientRect();
+    const W = cssW || 800;
+    const H = cssH || 600;
+    const dpr = window.devicePixelRatio || 1;
 
     const canvas = document.createElement("canvas");
-    canvas.width = W;
-    canvas.height = H;
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
     canvas.style.cssText =
-      "position:absolute;top:0;left:0;width:100%;height:100%;" +
-      "pointer-events:none;z-index:2;";
+      "position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2;";
     container.appendChild(canvas);
-    canvasRef.current = canvas;
 
     const ctx = canvas.getContext("2d")!;
+    ctx.scale(dpr, dpr);
 
     if (particlesRef.current.length === 0) {
-      const vp = getViewportBounds(map);
+      const vp0 = getViewport(map);
       particlesRef.current = Array.from({ length: PARTICLE_COUNT }, () =>
-        spawnParticle(vp, true),
+        spawnParticle(vp0, true),
       );
     }
 
-    const raf = { id: 0 };
+    let lastTime = performance.now();
+    let rafId = 0;
 
-    const render = () => {
-      ctx.globalCompositeOperation = "destination-out";
-      ctx.fillStyle = "rgba(0,0,0,0.06)";
-      ctx.fillRect(0, 0, W, H);
-      ctx.globalCompositeOperation = "source-over";
+    const render = (now: number) => {
+      const dt = Math.min(now - lastTime, 80);
+      lastTime = now;
 
+      ctx.clearRect(0, 0, W, H);
       const g = gridRef.current;
       if (!g) {
-        raf.id = requestAnimationFrame(render);
+        rafId = requestAnimationFrame(render);
         return;
       }
 
+      const vp = getViewport(map);
       const zoom = map.getZoom();
-      const dt = DT_BASE / Math.pow(2, zoom - BASE_ZOOM);
-      const vp = getViewportBounds(map);
 
-      if (particlesRef.current.length === 0) {
-        particlesRef.current = Array.from({ length: PARTICLE_COUNT }, () =>
-          spawnParticle(vp, true),
-        );
-      }
+      // Speed factor based on zoom
+      const dtScale =
+        (dt * SPEED_SCALE) / (1000 * Math.pow(2, zoom - BASE_ZOOM));
+
+      const spawn: Rect = {
+        minLat: Math.max(vp.minLat, g.minLat),
+        maxLat: Math.min(vp.maxLat, g.maxLat),
+        minLon: vp.minLon,
+        maxLon: vp.maxLon,
+      };
 
       for (const p of particlesRef.current) {
-        p.age += 1;
-
+        p.age += dt;
         const t = p.age / p.maxAge;
-        const alpha = t < 0.12 ? t / 0.12 : t > 0.72 ? (1 - t) / 0.28 : 1;
-        if (alpha <= 0) {
-          Object.assign(p, spawnParticle(vp));
+        const alpha = t < 0.1 ? t / 0.1 : t > 0.75 ? (1 - t) / 0.25 : 1.0;
+
+        if (alpha <= 0 || p.age >= p.maxAge) {
+          Object.assign(p, spawnParticle(spawn));
           continue;
         }
 
-        // MapLibre: project([lon, lat]) — note lon/lat order, opposite of Leaflet
-        const prev = map.project([p.prevLon, p.prevLat]);
-        const cur  = map.project([p.lon,     p.lat]);
+        const [headLat, headLon] = p.trail[0];
 
-        const { u, v } = sampleGrid(g, p.lat, p.lon);
+        // 1. Wrap longitude for grid sampling
+        const { u, v } = sampleGrid(g, headLat, wrapLon(headLon));
         const spd = Math.hypot(u, v);
 
-        ctx.save();
-        ctx.globalAlpha = alpha * 0.75;
-        ctx.strokeStyle = windSpeedColor(spd);
-        ctx.lineWidth = 1.0 + Math.min(spd / 15, 1) * 1.0;
-        ctx.lineCap = "round";
-        ctx.beginPath();
-        ctx.moveTo(prev.x, prev.y);
-        ctx.lineTo(cur.x, cur.y);
-        ctx.stroke();
-        ctx.restore();
+        // 2. CONSISTENT SPEED MATH:
+        // Mercator stretches things by 1/cos(lat).
+        // To make a particle move at the same VISUAL speed (pixels/sec),
+        // we must multiply the latitude delta by cos(lat).
+        const latRad = (headLat * Math.PI) / 180;
+        const cosLat = Math.cos(latRad);
+        const velocityFactor = (dtScale * p.speedMult) / 111320;
 
-        p.prevLat = p.lat;
-        p.prevLon = p.lon;
-        const latRad = (p.lat * Math.PI) / 180;
-        p.lat += (v * dt * p.speedMult) / 111_320;
-        p.lon += (u * dt * p.speedMult) / (111_320 * Math.cos(latRad));
+        const newLat = headLat + v * velocityFactor * cosLat;
+        const newLon = headLon + u * velocityFactor;
 
+        // 3. Boundary Check
+        const headPx = map.project([newLon, newLat]);
         if (
-          p.age > p.maxAge ||
-          cur.x < -MARGIN_PX || cur.x > W + MARGIN_PX ||
-          cur.y < -MARGIN_PX || cur.y > H + MARGIN_PX
+          newLat < g.minLat ||
+          newLat > g.maxLat ||
+          headPx.x < -MARGIN_PX ||
+          headPx.x > W + MARGIN_PX ||
+          headPx.y < -MARGIN_PX ||
+          headPx.y > H + MARGIN_PX
         ) {
-          Object.assign(p, spawnParticle(vp));
+          Object.assign(p, spawnParticle(spawn));
+          continue;
         }
+
+        p.trail.unshift([newLat, newLon]);
+        if (p.trail.length > TRAIL_LENGTH) p.trail.length = TRAIL_LENGTH;
+
+        // Draw trail
+        const n = p.trail.length;
+        ctx.save();
+        ctx.strokeStyle = speedColor(spd);
+        ctx.lineWidth = 1.0 + Math.min(spd / 20, 1) * 1.2;
+        ctx.lineCap = "round";
+
+        for (let i = n - 1; i > 0; i--) {
+          const p1 = map.project([p.trail[i][1], p.trail[i][0]]);
+          const p0 = map.project([p.trail[i - 1][1], p.trail[i - 1][0]]);
+
+          const segFrac = 1 - i / (n - 1);
+          ctx.globalAlpha = segFrac * segFrac * alpha * 0.85;
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p0.x, p0.y);
+          ctx.stroke();
+        }
+        ctx.restore();
       }
 
-      raf.id = requestAnimationFrame(render);
+      rafId = requestAnimationFrame(render);
     };
 
-    raf.id = requestAnimationFrame(render);
-
+    rafId = requestAnimationFrame(render);
     return () => {
-      cancelAnimationFrame(raf.id);
-      canvasRef.current = null;
+      cancelAnimationFrame(rafId);
       if (container.contains(canvas)) container.removeChild(canvas);
     };
   }, [map, enabled]);

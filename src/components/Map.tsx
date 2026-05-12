@@ -65,6 +65,12 @@ export default function WeatherMap({
         longitude: coords.lon,
         zoom: 5,
       }}
+      minZoom={1}
+      maxZoom={10}
+      reuseMaps
+      localIdeographFontFamily={"sans-serif"}
+      collectResourceTiming={false}
+      trackResize={false}
       style={{ width: "100%", height: "100vh" }}
       onClick={handleMapClick}
       maxTileCacheSize={200}
@@ -75,6 +81,7 @@ export default function WeatherMap({
         type="raster"
         tiles={[tileUrl]}
         tileSize={512}
+        volatile={true}
       >
         <Layer
           id="weather-layer"
@@ -134,12 +141,18 @@ function CustomMarker({
 
   const locationLabel = useMemo(() => {
     if (selectedCity) return `${selectedCity.name}, ${selectedCity.country}`;
-    if (pinnedCity)   return `${pinnedCity.name}, ${pinnedCity.country}`;
+    if (pinnedCity) return `${pinnedCity.name}, ${pinnedCity.country}`;
     return "";
   }, [selectedCity, pinnedCity]);
 
   return (
-    <Marker longitude={coords.lon} latitude={coords.lat} anchor="bottom">
+    <Marker
+      longitude={coords.lon}
+      latitude={coords.lat}
+      anchor="bottom"
+      pitchAlignment="map"
+      rotationAlignment="map"
+    >
       <div
         style={{
           display: "flex",
@@ -182,16 +195,26 @@ function CustomMarker({
           )}
           <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
             <svg
-              width="13" height="13" viewBox="0 0 24 24"
-              fill="none" stroke="white" strokeWidth="2.5"
-              strokeLinecap="round" strokeLinejoin="round"
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="white"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
               dangerouslySetInnerHTML={{ __html: cfg.iconPaths }}
             />
             <span>{value}</span>
           </div>
         </div>
 
-        <svg width="16" height="11" viewBox="0 0 16 11" style={{ marginTop: "-1px" }}>
+        <svg
+          width="16"
+          height="11"
+          viewBox="0 0 16 11"
+          style={{ marginTop: "-1px" }}
+        >
           <polygon points="8,11 0,0 16,0" fill={colors.bg} />
         </svg>
       </div>
