@@ -21,7 +21,7 @@ export default function Legend({ config, mapType }: Props) {
         zIndex: 1000,
       }}
     >
-      <div className="rounded-lg bg-black/70 backdrop-blur-md shadow-2xl p-3 text-white ">
+      <div className="rounded-lg border border-border bg-card/60 backdrop-blur-md shadow-2xl text-foreground p-3">
         <div className="mb-2 flex items-center justify-between text-sm">
           <span className="whitespace-nowrap">{config.label}</span>
         </div>

@@ -40,16 +40,71 @@ export default function WeatherMap({
   selectedCity,
 }: Props) {
   const mapRef = useRef<MapRef>(null);
+  const lastFlownCoords = useRef<{ lat: number; lon: number } | null>(null);
 
   useEffect(() => {
-    mapRef.current?.flyTo({
-      center: [coords.lon, coords.lat],
-      duration: 2000,
-      essential: true,
-    });
+    let timer: ReturnType<typeof setTimeout>;
+
+    const handleResize = () => {
+      // Clear the previous timer if the user is still dragging
+      clearTimeout(timer);
+
+      // Wait 150ms after the last resize event to recalculate the canvas
+      timer = setTimeout(() => {
+        if (mapRef.current) {
+          // This resets the internal canvas resolution and fixes the stretch
+          mapRef.current.resize();
+        }
+      }, 150);
+    };
+
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      clearTimeout(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (
+      coords.lat !== lastFlownCoords.current?.lat ||
+      coords.lon !== lastFlownCoords.current?.lon
+    ) {
+      mapRef.current?.flyTo({
+        center: [coords.lon, coords.lat],
+        duration: 3000,
+        essential: true,
+      });
+      // Update the ref so we don't fly again on the next re-render
+      lastFlownCoords.current = { lat: coords.lat, lon: coords.lon };
+    }
   }, [coords]);
 
   const tileUrl = useMemo(() => buildTileUrl(mapType, API_KEY), [mapType]);
+
+  // Weather Layer
+  const WeatherLayer = useMemo(
+    () => (
+      <Source
+        id="weather-source"
+        type="raster"
+        tiles={[tileUrl]}
+        tileSize={512}
+        volatile={true}
+      >
+        <Layer
+          id="weather-layer"
+          type="raster"
+          paint={{
+            "raster-opacity": 0.7,
+            "raster-fade-duration": 200,
+          }}
+        />
+      </Source>
+    ),
+    [tileUrl],
+  ); // Only rebuilds if the layer type/URL changes
 
   const handleMapClick = (e: MapMouseEvent) => {
     onMapClick(e.lngLat.lat, e.lngLat.lng);
@@ -76,22 +131,7 @@ export default function WeatherMap({
       maxTileCacheSize={200}
       refreshExpiredTiles={false}
     >
-      <Source
-        id="weather-source"
-        type="raster"
-        tiles={[tileUrl]}
-        tileSize={512}
-        volatile={true}
-      >
-        <Layer
-          id="weather-layer"
-          type="raster"
-          paint={{
-            "raster-opacity": 0.7,
-            "raster-fade-duration": 200,
-          }}
-        />
-      </Source>
+      {WeatherLayer}
 
       <CustomMarker
         coords={coords}
