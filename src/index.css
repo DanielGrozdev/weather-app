@@ -223,6 +223,17 @@ body,
   overflow: hidden;
 }
 
+/* ─── Splash screen ──────────────────────────────────────────────────────── */
+
+@keyframes splash-breathe {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50%       { opacity: 0.9;  transform: scale(1.06); }
+}
+
+.splash-breathe {
+  animation: splash-breathe 2s ease-in-out infinite;
+}
+
 /* ─── Custom weather marker ──────────────────────────────────────────────── */
 
 /* Strip Leaflet's default white box + border from the divIcon wrapper */

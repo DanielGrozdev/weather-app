@@ -1,5 +1,7 @@
-import maplibregl from "maplibre-gl";
-import Map from "./components/Map";
+import { lazy, Suspense } from "react";
+import SplashScreen from "./components/SplashScreen";
+
+const Map = lazy(() => import("./components/Map"));
 import LayerTypes from "./components/menus/LayerTypes";
 import SettingsButton from "./components/menus/SettingsButton";
 import CitySearch from "./components/search/CitySearch";
@@ -15,13 +17,6 @@ import { useTranslation } from "react-i18next";
 import TimeScrubber from "./components/TimeScrubber";
 import Logo from "./assets/logo.svg";
 
-// Set before map mounts
-const logicalCores =
-  typeof navigator !== "undefined" ? navigator.hardwareConcurrency || 2 : 2;
-const workerCount = Math.min(Math.max(Math.floor(logicalCores / 2), 2), 6);
-maplibregl.setWorkerCount(workerCount);
-maplibregl.setMaxParallelImageRequests(32);
-maplibregl.prewarm();
 
 function App() {
   const {
@@ -115,17 +110,19 @@ function App() {
           </>
         )}
 
-        {/* Map */}
-        <Map
-          coords={coords}
-          onMapClick={onMapClick}
-          mapType={mapType}
-          windParticlesEnabled={windParticlesEnabled && selectedTime === 0}
-          selectedCity={selectedCity}
-          onSyncingChange={setIsSyncing}
-          customCoords={customCoords}
-          selectedTime={selectedTime}
-        />
+        {/* Map — lazy loaded; SplashScreen shown until the chunk arrives */}
+        <Suspense fallback={<SplashScreen />}>
+          <Map
+            coords={coords}
+            onMapClick={onMapClick}
+            mapType={mapType}
+            windParticlesEnabled={windParticlesEnabled && selectedTime === 0}
+            selectedCity={selectedCity}
+            onSyncingChange={setIsSyncing}
+            customCoords={customCoords}
+            selectedTime={selectedTime}
+          />
+        </Suspense>
 
         {/* Syncing indicator */}
         {isSyncing && (

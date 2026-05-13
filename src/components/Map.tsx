@@ -18,6 +18,13 @@ import { LAYER_CONFIG } from "../lib/consts";
 import { WindParticlesLayer } from "./WindParticles";
 import { WindPoiLayer } from "./WindPoiLayer";
 
+// ── MapLibre bootstrap (runs once when this chunk is first imported) ──────────
+const logicalCores =
+  typeof navigator !== "undefined" ? navigator.hardwareConcurrency || 2 : 2;
+maplibregl.setWorkerCount(Math.min(Math.max(Math.floor(logicalCores / 2), 2), 6));
+maplibregl.setMaxParallelImageRequests(32);
+maplibregl.prewarm();
+
 const API_KEY = import.meta.env.VITE_API_KEY;
 const MAPTILER_API_KEY = import.meta.env.VITE_MAP_TILER_KEY;
 const MAPTILER_STYLE = `https://api.maptiler.com/maps/backdrop-dark/style.json?key=${MAPTILER_API_KEY}`;
