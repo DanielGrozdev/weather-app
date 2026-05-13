@@ -254,6 +254,8 @@ export default function WeatherMap({
   return (
     <Map
       ref={mapRef}
+      reuseMaps
+      renderWorldCopies
       mapStyle={MAPTILER_STYLE}
       attributionControl={false}
       initialViewState={{
@@ -263,7 +265,6 @@ export default function WeatherMap({
       }}
       minZoom={1}
       maxZoom={10}
-      reuseMaps
       localIdeographFontFamily="sans-serif"
       collectResourceTiming={false}
       trackResize={false}
@@ -284,6 +285,7 @@ export default function WeatherMap({
           tileSize={256}
           minzoom={0}
           maxzoom={12}
+          volatile
         >
           <Layer
             id="weather-layer-A"
@@ -363,7 +365,9 @@ function CustomMarker({
     if (!data) return null;
     if (!selectedTime || !data.hourly.length) return data.current;
     return data.hourly.reduce((best, h) =>
-      Math.abs(h.dt - selectedTime) < Math.abs(best.dt - selectedTime) ? h : best,
+      Math.abs(h.dt - selectedTime) < Math.abs(best.dt - selectedTime)
+        ? h
+        : best,
     );
   }, [data, selectedTime]);
 

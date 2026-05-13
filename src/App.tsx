@@ -49,7 +49,7 @@ function App() {
           <img
             src={Logo}
             alt="Breezy"
-            className="h-12 select-none opacity-75"
+            className="h-14 select-none opacity-75"
             draggable={false}
           />
         </div>
@@ -109,7 +109,11 @@ function App() {
               />
             </div>
             <div className="absolute right-3 top-24 z-1100">
-              <WeatherOverlay coords={coords} selectedCity={selectedCity} selectedTime={selectedTime} />
+              <WeatherOverlay
+                coords={coords}
+                selectedCity={selectedCity}
+                selectedTime={selectedTime}
+              />
             </div>
           </>
         ) : null}
