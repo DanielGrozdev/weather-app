@@ -8,6 +8,7 @@ type Props = {
   setMapType: Dispatch<SetStateAction<MapLayerType>>;
   windParticlesEnabled: boolean;
   setWindParticlesEnabled: Dispatch<SetStateAction<boolean>>;
+  isForecast?: boolean;
 };
 
 export default function LayerTypes({
@@ -15,6 +16,7 @@ export default function LayerTypes({
   setMapType,
   windParticlesEnabled,
   setWindParticlesEnabled,
+  isForecast = false,
 }: Props) {
   const { t } = useTranslation();
 
@@ -57,29 +59,51 @@ export default function LayerTypes({
 
       <div className="h-px bg-border/70" />
 
-      <div className="p-3 flex items-center justify-between gap-3">
-        <div className="text-sm text-muted-foreground">
+      <div className="relative group p-3 flex items-center justify-between gap-3">
+        <div
+          className={[
+            "text-sm transition-colors",
+            isForecast ? "text-muted-foreground/40" : "text-muted-foreground",
+          ].join(" ")}
+        >
           {t("layers.windParticles")}
         </div>
         <button
           type="button"
           role="switch"
-          aria-checked={windParticlesEnabled}
+          aria-checked={windParticlesEnabled && !isForecast}
+          disabled={isForecast}
           onClick={() => setWindParticlesEnabled((v) => !v)}
           className={[
             "relative w-12 h-7 rounded-full border-2 transition-colors",
-            windParticlesEnabled
-              ? "bg-muted border-primary"
-              : "bg-muted border-muted-foreground",
+            isForecast
+              ? "bg-muted border-muted-foreground opacity-35 cursor-not-allowed"
+              : windParticlesEnabled
+                ? "bg-muted border-primary"
+                : "bg-muted border-muted-foreground",
           ].join(" ")}
         >
           <span
             className={[
               "absolute top-0.5 left-0.5 size-5 rounded-full bg-primary shadow transition-transform",
-              windParticlesEnabled ? "translate-x-5" : "translate-x-0",
+              windParticlesEnabled && !isForecast
+                ? "translate-x-5"
+                : "translate-x-0",
             ].join(" ")}
           />
         </button>
+
+        {isForecast && (
+          <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:flex">
+            <div className="whitespace-nowrap rounded-lg bg-card border border-border px-2.5 py-1.5 text-[11px] text-muted-foreground shadow-lg">
+              {t("layers.windParticlesLiveOnly")}
+            </div>
+            <div
+              className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-border"
+              style={{ marginTop: "-1px" }}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

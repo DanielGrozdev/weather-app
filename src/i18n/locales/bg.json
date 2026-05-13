@@ -26,7 +26,8 @@
     "windSpeed": "Скорост на вятъра",
     "precipitation": "Валежи",
     "clouds": "Облачност",
-    "windParticles": "Частици вятър"
+    "windParticles": "Частици вятър",
+    "windParticlesLiveOnly": "Достъпно само в режим на живо"
   },
   "timeScrubber": {
     "label": "Времева лента",

@@ -26,7 +26,8 @@
     "windSpeed": "Wind speed",
     "precipitation": "Precipitation",
     "clouds": "Clouds",
-    "windParticles": "Wind particles"
+    "windParticles": "Wind particles",
+    "windParticlesLiveOnly": "Available in live mode only"
   },
   "timeScrubber": {
     "label": "Time slider",

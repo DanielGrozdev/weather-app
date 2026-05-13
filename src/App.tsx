@@ -99,6 +99,7 @@ function App() {
                 setMapType={setMapType}
                 windParticlesEnabled={windParticlesEnabled}
                 setWindParticlesEnabled={setWindParticlesEnabled}
+                isForecast={selectedTime > 0}
               />
             </div>
             <div className="absolute top-3 left-1/2 -translate-x-1/2 z-1100 w-[min(560px,calc(100%-24px))]">
@@ -140,7 +141,7 @@ function App() {
 
         {/* Time scrubber */}
         {overlaysVisible && (
-          <div className="absolute bottom-0 left-0 w-[300px] ml-4 mb-14">
+          <div className="absolute z-1100 pointer-events-auto bottom-0 left-0 w-[300px] ml-4 mb-14">
             <TimeScrubber
               selectedTime={selectedTime}
               onChange={setSelectedTime}

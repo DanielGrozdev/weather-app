@@ -389,6 +389,7 @@ function CustomMarker({
       anchor="bottom"
       pitchAlignment="map"
       rotationAlignment="map"
+      className="z-1100"
     >
       <div
         style={{

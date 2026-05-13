@@ -26,7 +26,8 @@
     "windSpeed": "Vitesse du vent",
     "precipitation": "Précipitations",
     "clouds": "Nuages",
-    "windParticles": "Particules de vent"
+    "windParticles": "Particules de vent",
+    "windParticlesLiveOnly": "Disponible en mode direct uniquement"
   },
   "timeScrubber": {
     "label": "Curseur temporel",

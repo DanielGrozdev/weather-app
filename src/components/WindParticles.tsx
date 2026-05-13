@@ -21,7 +21,7 @@ type Rect = { minLat: number; maxLat: number; minLon: number; maxLon: number };
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const PARTICLE_COUNT = 1000;
-const TRAIL_LENGTH = 12;
+const TRAIL_LENGTH = 24;
 const SPEED_SCALE = 18_000;
 const BASE_ZOOM = 6;
 const MIN_LIFE_MS = 900;
@@ -121,8 +121,17 @@ export function WindParticlesLayer({
     canvas.width = Math.round(W * dpr);
     canvas.height = Math.round(H * dpr);
     canvas.style.cssText =
-      "position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2;";
-    container.appendChild(canvas);
+      "position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;";
+    // Insert after the WebGL canvas container so MapLibre markers (appended later) stack above us
+    const canvasContainer = container.querySelector(
+      ".maplibregl-canvas-container",
+    );
+
+    if (canvasContainer?.nextSibling) {
+      container.insertBefore(canvas, canvasContainer.nextSibling);
+    } else {
+      container.appendChild(canvas);
+    }
 
     const ctx = canvas.getContext("2d")!;
     ctx.scale(dpr, dpr);
