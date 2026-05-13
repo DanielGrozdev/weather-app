@@ -22,7 +22,7 @@ const API_KEY = import.meta.env.VITE_API_KEY;
 const MAPTILER_API_KEY = import.meta.env.VITE_MAP_TILER_KEY;
 const MAPTILER_STYLE = `https://api.maptiler.com/maps/backdrop-dark/style.json?key=${MAPTILER_API_KEY}`;
 
-const FADE_MS = 300;
+const FADE_MS = 100;
 
 type Props = {
   coords: Coords;
@@ -63,7 +63,7 @@ const LAYER_PAINT = (opacity: number) =>
   ({
     "raster-opacity-transition": { duration: FADE_MS, delay: 0 },
     "raster-opacity": opacity,
-    "raster-fade-duration": 300,
+    "raster-fade-duration": 500,
     "raster-resampling": "linear",
   }) as const;
 
@@ -159,34 +159,31 @@ export default function WeatherMap({
     const active = activeSlotRef.current;
     const gen = genRef.current;
 
-    // Brief pause so initial tiles have time to arrive before the old layer fades
+    if (genRef.current !== gen) return; // mapType changed again — abort
+
+    if (pending === "A") {
+      setSlotA((s) => ({ ...s, opacity: 1 }));
+      setSlotB((s) => ({ ...s, opacity: 0 }));
+    } else {
+      setSlotB((s) => ({ ...s, opacity: 1 }));
+      setSlotA((s) => ({ ...s, opacity: 0 }));
+    }
+
+    // After the CSS transition finishes, tear down the old slot
     setTimeout(() => {
-      if (genRef.current !== gen) return; // mapType changed again — abort
+      if (genRef.current !== gen) return;
 
-      if (pending === "A") {
-        setSlotA((s) => ({ ...s, opacity: 1 }));
-        setSlotB((s) => ({ ...s, opacity: 0 }));
-      } else {
-        setSlotB((s) => ({ ...s, opacity: 1 }));
-        setSlotA((s) => ({ ...s, opacity: 0 }));
-      }
+      activeSlotRef.current = pending;
+      pendingSlotRef.current = null;
 
-      // After the CSS transition finishes, tear down the old slot
-      setTimeout(() => {
-        if (genRef.current !== gen) return;
+      // Unmount old source to free GPU memory
+      if (active === "A") setSlotA({ url: "", opacity: 0 });
+      else setSlotB({ url: "", opacity: 0 });
 
-        activeSlotRef.current = pending;
-        pendingSlotRef.current = null;
-
-        // Unmount old source to free GPU memory
-        if (active === "A") setSlotA({ url: "", opacity: 0 });
-        else setSlotB({ url: "", opacity: 0 });
-
-        isSyncingRef.current = false;
-        onSyncingRef.current?.(false);
-        transitioningRef.current = false;
-      }, FADE_MS + 50);
-    }, 300);
+      isSyncingRef.current = false;
+      onSyncingRef.current?.(false);
+      transitioningRef.current = false;
+    }, FADE_MS + 50);
   }, []);
 
   // ── Fade-on-Flight: fade → flyTo → idle → fade back ──────────────────────
@@ -268,10 +265,10 @@ export default function WeatherMap({
       localIdeographFontFamily="sans-serif"
       collectResourceTiming={false}
       trackResize={false}
-      style={{ width: "100%", height: "100vh" }}
+      style={{ width: "100%", height: "100%" }}
       onClick={(e: MapMouseEvent) => onMapClick(e.lngLat.lat, e.lngLat.lng)}
-      maxTileCacheSize={500}
-      fadeDuration={500}
+      maxTileCacheSize={1000}
+      fadeDuration={0}
       refreshExpiredTiles={false}
       onSourceData={handleSourceData}
       onIdle={handleIdle}
@@ -389,7 +386,6 @@ function CustomMarker({
       anchor="bottom"
       pitchAlignment="map"
       rotationAlignment="map"
-      className="z-1100"
     >
       <div
         style={{

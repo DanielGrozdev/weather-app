@@ -4,19 +4,23 @@ import { type ReactNode, useState } from "react";
 type Props = {
   children: ReactNode;
   label?: string;
+  className?: string;
 };
 
 // Height of the always-visible handle strip (px).
 const HANDLE_H = 44;
 
-export default function BottomDrawer({ children, label = "Forecast" }: Props) {
+export default function BottomDrawer({ children, label = "Forecast", className }: Props) {
   const [open, setOpen] = useState(false);
 
   return (
     <div
-      className="absolute bottom-0 left-0 right-0 z-[1100] pointer-events-auto
-                 rounded-t-2xl border-t border-x border-border bg-card/75 backdrop-blur-md shadow-2xl
-                 transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
+      className={[
+        "absolute bottom-0 left-0 right-0 z-[1100] pointer-events-auto",
+        "rounded-t-2xl border-t border-x border-border bg-card/75 backdrop-blur-md shadow-2xl",
+        "transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
+        className,
+      ].filter(Boolean).join(" ")}
       style={{
         transform: open ? "translateY(0)" : `translateY(calc(100% - ${HANDLE_H}px))`,
         willChange: "transform",

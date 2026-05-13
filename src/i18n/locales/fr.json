@@ -42,7 +42,10 @@
     "showOverlays": "Afficher les couches",
     "switchToFahrenheit": "Passer en Fahrenheit",
     "switchToCelsius": "Passer en Celsius",
-    "loadingLayer": "Chargement…"
+    "loadingLayer": "Chargement…",
+    "settings": "Paramètres",
+    "units": "Unités",
+    "language": "Langue"
   },
   "forecast": {
     "next48h": "Prochaines 48 heures",

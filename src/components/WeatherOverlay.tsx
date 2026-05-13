@@ -31,7 +31,7 @@ function formatCoords(coords: Coords) {
   return `${coords.lat.toFixed(2)}, ${coords.lon.toFixed(2)}`;
 }
 
-export default function WeatherOverlay({ coords, selectedCity, selectedTime }: Props) {
+export default function WeatherOverlay({ coords, selectedCity, selectedTime, className }: Props) {
   const { units } = useUnits();
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(true);
@@ -62,7 +62,7 @@ export default function WeatherOverlay({ coords, selectedCity, selectedTime }: P
   }, [data, selectedTime]);
 
   return (
-    <div className="rounded-2xl min-w-70 border border-border bg-card/60 backdrop-blur-md shadow-2xl text-foreground overflow-hidden">
+    <div className={["rounded-2xl min-w-70 border border-border bg-card/60 backdrop-blur-md shadow-2xl text-foreground overflow-hidden", className].filter(Boolean).join(" ")}>
       {/* ── Header ── */}
       <div className="px-4 pt-4 pb-3">
         <div className="flex items-start justify-between gap-4">

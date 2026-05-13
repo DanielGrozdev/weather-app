@@ -42,7 +42,10 @@
     "showOverlays": "Покажи слоевете",
     "switchToFahrenheit": "Превключи към Фаренхайт",
     "switchToCelsius": "Превключи към Целзий",
-    "loadingLayer": "Зарежда слой…"
+    "loadingLayer": "Зарежда слой…",
+    "settings": "Настройки",
+    "units": "Единици",
+    "language": "Език"
   },
   "forecast": {
     "next48h": "Следващите 48 часа",

@@ -42,7 +42,10 @@
     "showOverlays": "Show overlays",
     "switchToFahrenheit": "Switch to Fahrenheit",
     "switchToCelsius": "Switch to Celsius",
-    "loadingLayer": "Loading layer…"
+    "loadingLayer": "Loading layer…",
+    "settings": "Settings",
+    "units": "Units",
+    "language": "Language"
   },
   "forecast": {
     "next48h": "Next 48 hours",

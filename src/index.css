@@ -218,7 +218,9 @@ body,
   height: 100%;
   margin: 0;
   padding: 0;
-  overflow-y: hidden;
+  /* overflow-y handled per-element: body stays hidden so desktop map fills
+     the screen; the mobile panel gets its own overflow-y-auto scroll area. */
+  overflow: hidden;
 }
 
 /* ─── Custom weather marker ──────────────────────────────────────────────── */

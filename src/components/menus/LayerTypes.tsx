@@ -5,7 +5,7 @@ import type { MapLayerType } from "../../types";
 
 type Props = {
   mapType: MapLayerType;
-  setMapType: Dispatch<SetStateAction<MapLayerType>>;
+  setMapType: (type: MapLayerType) => void;
   windParticlesEnabled: boolean;
   setWindParticlesEnabled: Dispatch<SetStateAction<boolean>>;
   isForecast?: boolean;
@@ -32,8 +32,9 @@ export default function LayerTypes({
     { value: "clouds_new", labelKey: "layers.clouds", Icon: Cloud },
   ];
   return (
-    <div className="w-[220px] rounded-2xl border border-border bg-card/60 backdrop-blur-md shadow-2xl overflow-hidden">
-      <div className="p-2 space-y-2">
+    <div className="md:w-[220px] rounded-2xl border border-border bg-card/60 backdrop-blur-md shadow-2xl overflow-hidden">
+      {/* Desktop: vertical list. Mobile: horizontal scrolling pills. */}
+      <div className="p-2 flex flex-row gap-2 overflow-x-auto md:flex-col md:space-y-2 md:overflow-visible">
         {items.map((item) => {
           const active = item.value === mapType;
           const Icon = item.Icon;
@@ -43,15 +44,15 @@ export default function LayerTypes({
               type="button"
               onClick={() => setMapType(item.value as MapLayerType)}
               className={[
-                "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl",
-                "text-sm transition-colors",
+                "shrink-0 md:w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl",
+                "text-sm transition-colors whitespace-nowrap",
                 active
                   ? "bg-primary text-white"
                   : "bg-muted/35 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
               ].join(" ")}
             >
               <Icon className="size-4.5 shrink-0 opacity-90" />
-              <span className="truncate">{t(item.labelKey)}</span>
+              <span>{t(item.labelKey)}</span>
             </button>
           );
         })}

@@ -7,18 +7,18 @@ type LegendConfig = {
 
 type Props = {
   config: LegendConfig;
+  /** When true, renders as an inline block instead of absolute-positioned. */
+  inline?: boolean;
 };
 
-export default function Legend({ config }: Props) {
+export default function Legend({ config, inline = false }: Props) {
   return (
     <div
-      className="pointer-events-auto mr-4 mb-14 w-[300px]"
-      style={{
-        position: "absolute",
-        bottom: 0,
-        right: 0,
-        zIndex: 1000,
-      }}
+      className={
+        inline
+          ? "w-full pointer-events-auto"
+          : "pointer-events-auto mr-4 mb-14 w-[300px] absolute bottom-0 right-0 z-[1000]"
+      }
     >
       <div className="rounded-lg border border-border bg-card/60 backdrop-blur-md shadow-2xl text-foreground p-3">
         <div className="mb-2 flex items-center justify-between text-sm">
