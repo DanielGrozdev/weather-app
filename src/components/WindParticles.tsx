@@ -1,250 +1,303 @@
-/**
- * WindParticlesLayer — Fixed for Date Line wrapping and Mercator visual speed consistency.
- */
-
 import { useEffect, useRef } from "react";
-import { useMap, type MapRef } from "react-map-gl/maplibre";
+import { useMap } from "react-map-gl/maplibre";
 import { useQuery } from "@tanstack/react-query";
-import { fetchWindGrid, sampleGrid, type WindGrid } from "../lib/windGrid";
+import { WIND_QUERY_KEY, fetchWindData, sampleGrid, type WindGrid } from "../lib/windGrid";
 
-// ── Types ──────────────────────────────────────────────────────────────────────
+const NUM_PARTICLES = 5000;
+const BASE_AGE      = 180;   // base frames before a particle resets
+const FADE_ALPHA    = 0.90;  // per-frame alpha multiplier — higher = longer ghost trail
 
-type Particle = {
-  trail: Array<[number, number]>;
-  age: number;
-  maxAge: number;
-  speedMult: number;
-};
-
-type Rect = { minLat: number; maxLat: number; minLon: number; maxLon: number };
-
-// ── Constants ──────────────────────────────────────────────────────────────────
-
-const PARTICLE_COUNT = 1000;
-const TRAIL_LENGTH = 24;
-const SPEED_SCALE = 18_000;
-const BASE_ZOOM = 6;
-const MIN_LIFE_MS = 900;
-const MAX_LIFE_MS = 2200;
-const MARGIN_PX = 80;
-
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
-/** Normalizes longitude to [-180, 180] */
-const wrapLon = (lon: number) => ((((lon + 180) % 360) + 360) % 360) - 180;
-
-const COLOR_STOPS: [number, number, number, number][] = [
-  [0, 50, 136, 189],
-  [5, 102, 194, 165],
-  [10, 171, 221, 164],
-  [15, 230, 245, 152],
-  [20, 254, 224, 139],
-  [25, 253, 174, 97],
-  [30, 213, 62, 79],
+// ─── Velocity-keyed colour ramp ──────────────────────────────────────────────
+// Faster particles are brighter / closer to white-cyan; slower particles sit
+// closer to the legend's dim violet base.
+const COLOR_STOPS = [
+  { max: 1.5,      rgb: "120, 95, 170" },   // dim violet
+  { max: 4,        rgb: "160, 145, 215" },  // soft lavender
+  { max: 8,        rgb: "180, 200, 235" },  // pale periwinkle
+  { max: 13,       rgb: "200, 230, 250" },  // light cyan
+  { max: 19,       rgb: "220, 245, 255" },  // bright cyan
+  { max: Infinity, rgb: "245, 255, 255" },  // near-white
 ];
 
-function speedColor(spd: number): string {
-  const s = Math.max(0, Math.min(30, spd));
-  for (let i = 0; i < COLOR_STOPS.length - 1; i++) {
-    const [s0, r0, g0, b0] = COLOR_STOPS[i];
-    const [s1, r1, g1, b1] = COLOR_STOPS[i + 1];
-    if (s <= s1) {
-      const t = (s - s0) / (s1 - s0);
-      return `rgb(${Math.round(r0 + t * (r1 - r0))},${Math.round(g0 + t * (g1 - g0))},${Math.round(b0 + t * (b1 - b0))})`;
-    }
+// Ease-in / ease-out: peak in mid-life, fade to 0 at both ends.
+const ALPHA_TIERS = [0.05, 0.12, 0.20, 0.32];
+
+// Tapered width: thin at tail and head, thicker mid-life.
+const WIDTH_TIERS = [0.7, 1.5, 2.4];
+
+function speedIdx(speed: number): number {
+  for (let k = 0; k < COLOR_STOPS.length; k++) {
+    if (speed < COLOR_STOPS[k].max) return k;
   }
-  return `rgb(213,62,79)`;
+  return COLOR_STOPS.length - 1;
 }
 
-function getViewport(map: MapRef): Rect {
-  const b = map.getBounds();
-  const minLon = b.getWest();
-  let maxLon = b.getEast();
-
-  // Handle crossing the Date Line so random spawning works
-  if (maxLon < minLon) maxLon += 360;
-
-  return {
-    minLat: b.getSouth(),
-    maxLat: b.getNorth(),
-    minLon,
-    maxLon,
-  };
+/** sin(πt) ∈ [0,1] — peak at t=0.5, zero at endpoints. */
+function lifeCurve(t: number): number {
+  return Math.sin(Math.PI * (t < 0 ? 0 : t > 1 ? 1 : t));
 }
 
-function spawnParticle(r: Rect, preAge = false): Particle {
-  const lat = r.minLat + Math.random() * (r.maxLat - r.minLat);
-  const lon = r.minLon + Math.random() * (r.maxLon - r.minLon);
-  const maxAge = MIN_LIFE_MS + Math.random() * (MAX_LIFE_MS - MIN_LIFE_MS);
-  return {
-    trail: [[lat, lon]],
-    age: preAge ? Math.random() * maxAge : 0,
-    maxAge,
-    speedMult: 0.75 + Math.random() * 0.5,
-  };
+function alphaIdx(curve: number): number {
+  if (curve < 0.18) return 0;
+  if (curve < 0.45) return 1;
+  if (curve < 0.75) return 2;
+  return 3;
 }
 
-// ── Component ──────────────────────────────────────────────────────────────────
+function widthIdx(curve: number): number {
+  if (curve < 0.33) return 0;
+  if (curve < 0.7)  return 1;
+  return 2;
+}
 
-export function WindParticlesLayer({
-  enabled,
-}: {
-  enabled?: boolean;
-  coords?: { lat: number; lon: number };
-}) {
-  const { current: map } = useMap();
+/**
+ * Geographic speed factor: degrees moved per (m/s of wind) per frame.
+ * Tuned so on-screen pixel speed scales sanely with zoom.
+ */
+function geoSpeedFactor(zoom: number): number {
+  return 0.05 * Math.pow(2, -zoom * 0.7);
+}
+
+type State = {
+  lat:   Float32Array;
+  lon:   Float32Array;
+  age:   Float32Array;
+  ttl:   Float32Array;
+  prevX: Float32Array;
+  prevY: Float32Array;
+  grid:  WindGrid | null;
+  raf:   number;
+};
+
+export function WindParticlesLayer({ enabled }: { enabled?: boolean }) {
+  const { current: mapRef } = useMap();
+  const stateRef = useRef<State | null>(null);
 
   const { data: grid } = useQuery({
-    queryKey: ["windGrid", "global"],
-    queryFn: fetchWindGrid,
-    staleTime: Infinity,
+    queryKey: WIND_QUERY_KEY,
+    queryFn:  fetchWindData,
+    staleTime: 6 * 60 * 60 * 1000,
     enabled: !!enabled,
   });
 
-  const gridRef = useRef<WindGrid | null>(null);
-  const particlesRef = useRef<Particle[]>([]);
-
+  // Keep the grid ref up to date without re-running the main effect
   useEffect(() => {
-    if (grid) gridRef.current = grid;
+    if (stateRef.current) stateRef.current.grid = grid ?? null;
   }, [grid]);
 
   useEffect(() => {
-    if (!enabled || !map) return;
+    if (!enabled || !mapRef || !grid) return;
 
-    const container = map.getContainer();
-    const { width: cssW, height: cssH } = container.getBoundingClientRect();
-    const W = cssW || 800;
-    const H = cssH || 600;
-    const dpr = window.devicePixelRatio || 1;
+    const map       = mapRef.getMap();
+    const container = mapRef.getContainer();
 
+    // ── Canvas overlay ────────────────────────────────────────────────────────
     const canvas = document.createElement("canvas");
-    canvas.width = Math.round(W * dpr);
-    canvas.height = Math.round(H * dpr);
     canvas.style.cssText =
       "position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;";
-    // Insert after the WebGL canvas container so MapLibre markers (appended later) stack above us
-    const canvasContainer = container.querySelector(
-      ".maplibregl-canvas-container",
-    );
+    const anchor = container.querySelector(".maplibregl-canvas-container");
+    if (anchor?.nextSibling) container.insertBefore(canvas, anchor.nextSibling);
+    else                     container.appendChild(canvas);
 
-    if (canvasContainer?.nextSibling) {
-      container.insertBefore(canvas, canvasContainer.nextSibling);
-    } else {
-      container.appendChild(canvas);
-    }
+    // ── Particle state ────────────────────────────────────────────────────────
+    const n = NUM_PARTICLES;
+    const state: State = {
+      lat:   new Float32Array(n),
+      lon:   new Float32Array(n),
+      age:   new Float32Array(n),
+      ttl:   new Float32Array(n),
+      prevX: new Float32Array(n).fill(-1),
+      prevY: new Float32Array(n).fill(-1),
+      grid:  grid,
+      raf:   0,
+    };
+    stateRef.current = state;
 
-    const ctx = canvas.getContext("2d")!;
-    ctx.scale(dpr, dpr);
+    // Stratified grid for spawning — avoids clumps, fills the field evenly.
+    const STRATA = Math.max(2, Math.ceil(Math.sqrt(n)));
 
-    if (particlesRef.current.length === 0) {
-      const vp0 = getViewport(map);
-      particlesRef.current = Array.from({ length: PARTICLE_COUNT }, () =>
-        spawnParticle(vp0, true),
-      );
-    }
-
-    let lastTime = performance.now();
-    let rafId = 0;
-
-    const render = (now: number) => {
-      const dt = Math.min(now - lastTime, 80);
-      lastTime = now;
-
-      ctx.clearRect(0, 0, W, H);
-      const g = gridRef.current;
-      if (!g) {
-        rafId = requestAnimationFrame(render);
-        return;
-      }
-
-      const vp = getViewport(map);
-      const zoom = map.getZoom();
-
-      // Speed factor based on zoom
-      const dtScale =
-        (dt * SPEED_SCALE) / (1000 * Math.pow(2, zoom - BASE_ZOOM));
-
-      const spawn: Rect = {
-        minLat: Math.max(vp.minLat, g.minLat),
-        maxLat: Math.min(vp.maxLat, g.maxLat),
-        minLon: vp.minLon,
-        maxLon: vp.maxLon,
+    const getPaddedBounds = () => {
+      const b   = map.getBounds();
+      const pad = 10;
+      return {
+        west:  b.getWest()  - pad,
+        east:  b.getEast()  + pad,
+        south: Math.max(-85, b.getSouth() - pad),
+        north: Math.min(85,  b.getNorth() + pad),
       };
+    };
 
-      for (const p of particlesRef.current) {
-        p.age += dt;
-        const t = p.age / p.maxAge;
-        const alpha = t < 0.1 ? t / 0.1 : t > 0.75 ? (1 - t) / 0.25 : 1.0;
+    const resetParticle = (i: number) => {
+      const b      = getPaddedBounds();
+      const cellW  = (b.east  - b.west)  / STRATA;
+      const cellH  = (b.north - b.south) / STRATA;
+      const cx     = Math.floor(Math.random() * STRATA);
+      const cy     = Math.floor(Math.random() * STRATA);
+      state.lon[i]   = b.west  + (cx + Math.random()) * cellW;
+      state.lat[i]   = b.south + (cy + Math.random()) * cellH;
+      state.ttl[i]   = BASE_AGE * (0.75 + Math.random() * 0.5); // ±25% variety
+      state.age[i]   = Math.floor(Math.random() * state.ttl[i]);
+      state.prevX[i] = -1;
+      state.prevY[i] = -1;
+    };
 
-        if (alpha <= 0 || p.age >= p.maxAge) {
-          Object.assign(p, spawnParticle(spawn));
+    const resize = () => {
+      canvas.width  = container.clientWidth;
+      canvas.height = container.clientHeight;
+      state.prevX.fill(-1);
+      state.prevY.fill(-1);
+    };
+
+    resize();
+    // Initial stratified placement: one particle per cell, lay it out evenly.
+    {
+      const b     = getPaddedBounds();
+      const cellW = (b.east  - b.west)  / STRATA;
+      const cellH = (b.north - b.south) / STRATA;
+      for (let i = 0; i < n; i++) {
+        const cx = i % STRATA;
+        const cy = Math.floor(i / STRATA) % STRATA;
+        state.lon[i]   = b.west  + (cx + Math.random()) * cellW;
+        state.lat[i]   = b.south + (cy + Math.random()) * cellH;
+        state.ttl[i]   = BASE_AGE * (0.75 + Math.random() * 0.5);
+        state.age[i]   = Math.floor(Math.random() * state.ttl[i]);
+        state.prevX[i] = -1;
+        state.prevY[i] = -1;
+      }
+    }
+
+    // Pre-allocated sub-buckets: speed × alpha × width.
+    const N_C = COLOR_STOPS.length;
+    const N_A = ALPHA_TIERS.length;
+    const N_W = WIDTH_TIERS.length;
+    const SUB_BUCKETS = N_C * N_A * N_W;
+
+    // ── Animation loop ────────────────────────────────────────────────────────
+    let lastTs = 0;
+    const frame = (ts: number) => {
+      state.raf = requestAnimationFrame(frame);
+
+      const dt  = lastTs === 0 ? 1 : Math.min(3, (ts - lastTs) / 16.67);
+      lastTs    = ts;
+
+      const g   = state.grid;
+      const ctx = canvas.getContext("2d");
+      if (!ctx || !g) return;
+
+      const W    = canvas.width;
+      const H    = canvas.height;
+      const zoom = map.getZoom();
+      const sf   = geoSpeedFactor(zoom) * dt;
+
+      // Motion-blur ghosting: scale existing pixel alpha by FADE_ALPHA each
+      // frame so prior segments persist briefly and trail off smoothly.
+      ctx.globalCompositeOperation = "destination-in";
+      ctx.fillStyle = `rgba(0,0,0,${FADE_ALPHA})`;
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalCompositeOperation = "source-over";
+
+      // Flat segment arrays per sub-bucket: [x0, y0, x1, y1, ...]
+      const buckets: number[][] = new Array(SUB_BUCKETS);
+      for (let b = 0; b < SUB_BUCKETS; b++) buckets[b] = [];
+
+      for (let i = 0; i < n; i++) {
+        const lat = state.lat[i];
+        const lon = state.lon[i];
+
+        // Bilinear sample from the shared wind grid.
+        const { u, v } = sampleGrid(g, lat, lon);
+        const speed    = Math.hypot(u, v);
+
+        // Advance in geographic space (cos-corrected longitude).
+        const cosLat = Math.max(0.05, Math.cos(lat * Math.PI / 180));
+        const newLat = lat + v * sf;
+        const newLon = lon + (u / cosLat) * sf;
+
+        state.age[i] += dt;
+        const t     = state.age[i] / state.ttl[i];
+        const curve = lifeCurve(t);
+
+        const pt = map.project([newLon, newLat]);
+        const px = pt.x, py = pt.y;
+
+        const offScreen = px < -100 || px > W + 100 || py < -100 || py > H + 100;
+        if (t >= 1 || offScreen || newLat < -85 || newLat > 85) {
+          resetParticle(i);
           continue;
         }
 
-        const [headLat, headLon] = p.trail[0];
+        const prevX = state.prevX[i];
+        const prevY = state.prevY[i];
+        state.lat[i]   = newLat;
+        state.lon[i]   = newLon;
+        state.prevX[i] = px;
+        state.prevY[i] = py;
 
-        // 1. Wrap longitude for grid sampling
-        const { u, v } = sampleGrid(g, headLat, wrapLon(headLon));
-        const spd = Math.hypot(u, v);
-
-        // 2. CONSISTENT SPEED MATH:
-        // Mercator stretches things by 1/cos(lat).
-        // To make a particle move at the same VISUAL speed (pixels/sec),
-        // we must multiply the latitude delta by cos(lat).
-        const latRad = (headLat * Math.PI) / 180;
-        const cosLat = Math.cos(latRad);
-        const velocityFactor = (dtScale * p.speedMult) / 111320;
-
-        const newLat = headLat + v * velocityFactor * cosLat;
-        const newLon = headLon + u * velocityFactor;
-
-        // 3. Boundary Check
-        const headPx = map.project([newLon, newLat]);
-        if (
-          newLat < g.minLat ||
-          newLat > g.maxLat ||
-          headPx.x < -MARGIN_PX ||
-          headPx.x > W + MARGIN_PX ||
-          headPx.y < -MARGIN_PX ||
-          headPx.y > H + MARGIN_PX
-        ) {
-          Object.assign(p, spawnParticle(spawn));
-          continue;
+        if (prevX >= 0 && prevY >= 0) {
+          const dx = px - prevX, dy = py - prevY;
+          // Skip teleport jumps (antimeridian wrap, etc).
+          if (dx * dx + dy * dy < 40000) {
+            const ci = speedIdx(speed);
+            const ai = alphaIdx(curve);
+            const wi = widthIdx(curve);
+            const key = (ci * N_A + ai) * N_W + wi;
+            buckets[key].push(prevX, prevY, px, py);
+          }
         }
-
-        p.trail.unshift([newLat, newLon]);
-        if (p.trail.length > TRAIL_LENGTH) p.trail.length = TRAIL_LENGTH;
-
-        // Draw trail
-        const n = p.trail.length;
-        ctx.save();
-        ctx.strokeStyle = speedColor(spd);
-        ctx.lineWidth = 1.0 + Math.min(spd / 20, 1) * 1.2;
-        ctx.lineCap = "round";
-
-        for (let i = n - 1; i > 0; i--) {
-          const p1 = map.project([p.trail[i][1], p.trail[i][0]]);
-          const p0 = map.project([p.trail[i - 1][1], p.trail[i - 1][0]]);
-
-          const segFrac = 1 - i / (n - 1);
-          ctx.globalAlpha = segFrac * segFrac * alpha * 0.85;
-          ctx.beginPath();
-          ctx.moveTo(p1.x, p1.y);
-          ctx.lineTo(p0.x, p0.y);
-          ctx.stroke();
-        }
-        ctx.restore();
       }
 
-      rafId = requestAnimationFrame(render);
+      // Batched stroke: one path per (colour, alpha, width) bucket.
+      ctx.lineCap = "round";
+      for (let key = 0; key < SUB_BUCKETS; key++) {
+        const segs = buckets[key];
+        if (segs.length === 0) continue;
+        const wi = key % N_W;
+        const ai = Math.floor(key / N_W) % N_A;
+        const ci = Math.floor(key / (N_W * N_A));
+        ctx.lineWidth   = WIDTH_TIERS[wi];
+        ctx.strokeStyle = `rgba(${COLOR_STOPS[ci].rgb}, ${ALPHA_TIERS[ai]})`;
+        ctx.beginPath();
+        for (let s = 0; s < segs.length; s += 4) {
+          ctx.moveTo(segs[s],     segs[s + 1]);
+          ctx.lineTo(segs[s + 2], segs[s + 3]);
+        }
+        ctx.stroke();
+      }
     };
 
-    rafId = requestAnimationFrame(render);
-    return () => {
-      cancelAnimationFrame(rafId);
-      if (container.contains(canvas)) container.removeChild(canvas);
+    state.raf = requestAnimationFrame(frame);
+
+    // On pan/zoom end, re-distribute particles that drifted off-screen using
+    // the same stratified scheme so the field stays evenly populated.
+    const onMoveEnd = () => {
+      const b     = getPaddedBounds();
+      const cellW = (b.east  - b.west)  / STRATA;
+      const cellH = (b.north - b.south) / STRATA;
+      for (let i = 0; i < n; i++) {
+        const pt = map.project([state.lon[i], state.lat[i]]);
+        if (pt.x < -200 || pt.x > canvas.width + 200 || pt.y < -200 || pt.y > canvas.height + 200) {
+          const cx = Math.floor(Math.random() * STRATA);
+          const cy = Math.floor(Math.random() * STRATA);
+          state.lon[i]   = b.west  + (cx + Math.random()) * cellW;
+          state.lat[i]   = b.south + (cy + Math.random()) * cellH;
+          state.age[i]   = 0;
+          state.prevX[i] = -1;
+          state.prevY[i] = -1;
+        }
+      }
     };
-  }, [map, enabled]);
+
+    map.on("moveend", onMoveEnd);
+    window.addEventListener("resize", resize);
+
+    return () => {
+      cancelAnimationFrame(state.raf);
+      map.off("moveend", onMoveEnd);
+      window.removeEventListener("resize", resize);
+      canvas.remove();
+      stateRef.current = null;
+    };
+  }, [mapRef, enabled, grid]);
 
   return null;
 }

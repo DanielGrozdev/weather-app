@@ -1,18 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Marker, useMap } from "react-map-gl/maplibre";
 import { useQuery } from "@tanstack/react-query";
-import { fetchWindGrid, sampleGrid, uvToWind } from "../lib/windGrid";
+import { WIND_QUERY_KEY, fetchWindData, sampleGrid, uvToWind } from "../lib/windGrid";
+import { useUnits } from "../hooks/useUnits";
+import { LAYER_CONFIG } from "../lib/consts";
 import type { LngLatBounds } from "maplibre-gl";
-
-// ─── colour scale — matches LAYER_CONFIG wind_new.getColors ──────────────────
-
-function windColor(ms: number): string {
-  if (ms < 2) return "#b478c8";
-  if (ms < 7) return "#7850a0";
-  if (ms < 14) return "#462878";
-  if (ms < 21) return "#1e1450";
-  return "#0a0a28";
-}
 
 // ─── deterministic jitter (stable on pan, no randomness per-render) ──────────
 
@@ -31,21 +23,23 @@ const JITTER = 0.45;
 type WindMarker = {
   lat: number;
   lon: number;
-  wind_speed: number;
+  speedMs: number;     // raw m/s — used for legend color matching
+  wind_speed: number;  // in user units — used for label
   wind_deg: number;
 };
 
 export function WindPoiLayer() {
   const { current: map } = useMap();
+  const { units } = useUnits();
   const [viewport, setViewport] = useState<{
     bounds: LngLatBounds;
     zoom: number;
   } | null>(null);
 
   const { data: grid } = useQuery({
-    queryKey: ["windGrid", "global"],
-    queryFn: fetchWindGrid,
-    staleTime: Infinity,
+    queryKey: WIND_QUERY_KEY,
+    queryFn:  fetchWindData,
+    staleTime: 6 * 60 * 60 * 1000,
   });
 
   useEffect(() => {
@@ -87,23 +81,28 @@ export function WindPoiLayer() {
         const finalLon = lon + jitter(lon, lat) * step * JITTER;
 
         const { u, v } = sampleGrid(grid, finalLat, finalLon);
-        const { wind_speed, wind_deg } = uvToWind(u, v, "metric");
+        const speedMs = Math.hypot(u, v);
+        const { wind_speed, wind_deg } = uvToWind(u, v, units);
 
-        result.push({ lat: finalLat, lon: finalLon, wind_speed, wind_deg });
+        result.push({ lat: finalLat, lon: finalLon, speedMs, wind_speed, wind_deg });
       }
     }
     return result;
-  }, [grid, viewport]);
+  }, [grid, viewport, units]);
 
   if (!markers.length) return null;
 
   return (
     <>
-      {markers.map(({ lat, lon, wind_speed, wind_deg }, i) => {
-        const color = windColor(wind_speed);
+      {markers.map(({ lat, lon, speedMs, wind_speed, wind_deg }, i) => {
+        // Reuse legend palette — keyed off m/s so colour stays stable across units.
+        const { bg } = LAYER_CONFIG.wind_new.getColors(
+          { temp: 0, wind_speed: speedMs, wind_deg, pressure: 0, humidity: 0, clouds: 0 },
+          "metric",
+        );
         // wind_deg is FROM-direction; +180 → TO-direction for the arrow
         const arrowDeg = (wind_deg + 180) % 360;
-        const speed = Math.round(wind_speed);
+        const label = Math.round(wind_speed);
 
         return (
           <Marker
@@ -113,7 +112,7 @@ export function WindPoiLayer() {
             anchor="center"
           >
             <div
-              style={{ backgroundColor: color }}
+              style={{ backgroundColor: bg }}
               className="inline-flex items-center gap-[3px] px-[5px] py-[3px]
                          rounded shadow-md select-none cursor-default
                          border border-white/10"
@@ -127,7 +126,7 @@ export function WindPoiLayer() {
                 <polygon points="4,0 8,8 0,8" fill="rgba(255,255,255,0.9)" />
               </svg>
               <span className="text-[10px] font-bold leading-none text-white tabular-nums">
-                {speed}
+                {label}
               </span>
             </div>
           </Marker>
