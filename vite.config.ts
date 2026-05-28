@@ -18,23 +18,41 @@ export default defineConfig({
         manualChunks(id) {
           // maplibre + react-map-gl land in the lazy Map chunk automatically
           // via the dynamic import — no need to force them here.
-          if (id.includes("node_modules/react/") || id.includes("node_modules/react-dom/")) {
+          if (
+            id.includes("node_modules/react/") ||
+            id.includes("node_modules/react-dom/")
+          ) {
             return "vendor-react";
           }
           if (id.includes("node_modules/@tanstack/")) {
             return "vendor-query";
           }
-          if (id.includes("node_modules/i18next") || id.includes("node_modules/react-i18next")) {
+          if (
+            id.includes("node_modules/i18next") ||
+            id.includes("node_modules/react-i18next")
+          ) {
             return "vendor-i18n";
           }
-          if (id.includes("node_modules/gsap") || id.includes("node_modules/@gsap/")) {
+          if (
+            id.includes("node_modules/gsap") ||
+            id.includes("node_modules/@gsap/")
+          ) {
             return "vendor-gsap";
           }
-          if (id.includes("node_modules/lucide-react") || id.includes("node_modules/radix-ui")) {
+          if (
+            id.includes("node_modules/lucide-react") ||
+            id.includes("node_modules/radix-ui")
+          ) {
             return "vendor-ui";
           }
         },
       },
+    },
+  },
+  server: {
+    https: {
+      key: path.resolve(__dirname, "certs/localhost.key"),
+      cert: path.resolve(__dirname, "certs/localhost.crt"),
     },
   },
 });

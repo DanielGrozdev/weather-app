@@ -2,7 +2,6 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
@@ -49,7 +48,17 @@ type Props = {
 
 export default function TimeScrubber({ selectedTime, onChange }: Props) {
   const { t, i18n } = useTranslation();
-  const timeSteps = useMemo(() => buildTimeSteps(), []);
+  const [timeSteps, setTimeSteps] = useState(buildTimeSteps);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setTimeSteps(buildTimeSteps());
+    }, 60_000); // every minute
+
+    return () => clearInterval(id);
+  }, []);
+
+  console.log(timeSteps);
 
   const [localIndex, setLocalIndex] = useState(() => {
     const idx = timeSteps.indexOf(selectedTime);
@@ -65,6 +74,7 @@ export default function TimeScrubber({ selectedTime, onChange }: Props) {
     localIndexRef.current = localIndex;
   });
   const onChangeRef = useRef(onChange);
+
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);

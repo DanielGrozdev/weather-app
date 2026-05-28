@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Marker, useMap } from "react-map-gl/maplibre";
-import { useQuery } from "@tanstack/react-query";
-import { WIND_QUERY_KEY, fetchWindData, sampleGrid, uvToWind } from "../lib/windGrid";
+import { sampleGrid, uvToWind, windToDeg } from "../lib/windGrid";
+import { useWindGrid } from "../hooks/useWindGrid";
 import { useUnits } from "../hooks/useUnits";
 import { LAYER_CONFIG } from "../lib/consts";
 import type { LngLatBounds } from "maplibre-gl";
@@ -36,11 +36,7 @@ export function WindPoiLayer() {
     zoom: number;
   } | null>(null);
 
-  const { data: grid } = useQuery({
-    queryKey: WIND_QUERY_KEY,
-    queryFn:  fetchWindData,
-    staleTime: 6 * 60 * 60 * 1000,
-  });
+  const grid = useWindGrid();
 
   useEffect(() => {
     if (!map) return;
@@ -97,11 +93,19 @@ export function WindPoiLayer() {
       {markers.map(({ lat, lon, speedMs, wind_speed, wind_deg }, i) => {
         // Reuse legend palette — keyed off m/s so colour stays stable across units.
         const { bg } = LAYER_CONFIG.wind_new.getColors(
-          { temp: 0, wind_speed: speedMs, wind_deg, pressure: 0, humidity: 0, clouds: 0 },
+          {
+            temp: 0,
+            feels_like: 0,
+            wind_speed: speedMs,
+            wind_deg,
+            pressure: 0,
+            humidity: 0,
+            clouds: 0,
+            weather: [],
+          },
           "metric",
         );
-        // wind_deg is FROM-direction; +180 → TO-direction for the arrow
-        const arrowDeg = (wind_deg + 180) % 360;
+        const arrowDeg = windToDeg(wind_deg);
         const label = Math.round(wind_speed);
 
         return (

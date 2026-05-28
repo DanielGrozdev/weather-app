@@ -1,13 +1,13 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ChevronDown } from "lucide-react";
-import { useMemo, useState } from "react";
-import { getWeather, reverseGeocode } from "../api";
-import { useWindAtPoint } from "../hooks/useWindAtPoint";
+import { useState } from "react";
+import { useDisplayWeather } from "../hooks/useDisplayWeather";
+import { useEffectiveWind } from "../hooks/useEffectiveWind";
+import { usePinnedCity } from "../hooks/usePinnedCity";
 import { useUnits } from "../hooks/useUnits";
 import { formatTemp, formatWindSpeed } from "../lib/format";
 import type { CityResult, Coords } from "../types";
 import WeatherIcon from "./WeatherIcon";
-import UpArrow from "/src/assets/uparrow.svg?react";
+import { WindArrow } from "./WindArrow";
 import { useTranslation } from "react-i18next";
 
 type Props = {
@@ -36,30 +36,9 @@ export default function WeatherOverlay({ coords, selectedCity, selectedTime, cla
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(true);
 
-  const { data: pinnedCity, isFetching: geocoding } = useQuery({
-    queryKey: ["reverseGeocode", coords.lat, coords.lon],
-    queryFn: () => reverseGeocode(coords.lat, coords.lon),
-    enabled: selectedCity === null,
-    staleTime: Infinity,
-    placeholderData: keepPreviousData,
-  });
-
-  const { data, isFetching } = useQuery({
-    queryKey: ["weather", coords.lat, coords.lon, units],
-    queryFn: () => getWeather({ lat: coords.lat, lon: coords.lon, units }),
-    placeholderData: keepPreviousData,
-  });
-
-  const omWind = useWindAtPoint(coords, units);
-
-  const display = useMemo(() => {
-    if (!data) return null;
-    if (selectedTime === 0) return data.current;
-    // Find the hourly slot closest to the selected forecast timestamp
-    return data.hourly.reduce((best, h) =>
-      Math.abs(h.dt - selectedTime) < Math.abs(best.dt - selectedTime) ? h : best,
-    );
-  }, [data, selectedTime]);
+  const { data: pinnedCity, isFetching: geocoding } = usePinnedCity(coords, selectedCity);
+  const { display, isFetching } = useDisplayWeather({ coords, units, selectedTime });
+  const effectiveWind = useEffectiveWind(coords, units, display, selectedTime);
 
   return (
     <div className={["rounded-2xl min-w-70 border border-border bg-card/60 backdrop-blur-md shadow-2xl text-foreground overflow-hidden", className].filter(Boolean).join(" ")}>
@@ -148,17 +127,15 @@ export default function WeatherOverlay({ coords, selectedCity, selectedTime, cla
               {
                 label: t("overlay.windSpeed"),
                 value: formatWindSpeed(
-                  (selectedTime === 0 ? omWind?.wind_speed : null) ?? display.wind_speed,
+                  effectiveWind?.wind_speed ?? display.wind_speed,
                   units,
                 ),
               },
               {
                 label: t("overlay.windDirection"),
                 value: (
-                  <UpArrow
-                    style={{
-                      transform: `rotate(${(((selectedTime === 0 ? omWind?.wind_deg : null) ?? display.wind_deg) + 180) % 360}deg)`,
-                    }}
+                  <WindArrow
+                    fromDeg={effectiveWind?.wind_deg ?? display.wind_deg}
                     className="size-5 opacity-90"
                   />
                 ),

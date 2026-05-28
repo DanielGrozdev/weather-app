@@ -1,9 +1,9 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { getWeather } from "../api";
+import { useWeatherQuery } from "../hooks/useWeatherQuery";
 import { useUnits } from "../hooks/useUnits";
 import { formatTemp, formatWindSpeed } from "../lib/format";
+import { windToDeg } from "../lib/windGrid";
 import type { Coords } from "../types";
 import UpArrow from "/src/assets/uparrow.svg?react";
 import WeatherIcon from "./WeatherIcon";
@@ -206,11 +206,7 @@ export default function ForecastDrawer({ coords }: Props) {
   const { units } = useUnits();
   const { t, i18n } = useTranslation();
 
-  const { data, isFetching } = useQuery({
-    queryKey: ["weather", coords.lat, coords.lon, units],
-    queryFn: () => getWeather({ lat: coords.lat, lon: coords.lon, units }),
-    placeholderData: keepPreviousData,
-  });
+  const { data, isFetching } = useWeatherQuery(coords, units);
 
   const hours = useMemo(
     () =>
@@ -310,7 +306,7 @@ export default function ForecastDrawer({ coords }: Props) {
                   <UpArrow
                     className="size-4 text-foreground/60"
                     style={{
-                      transform: `rotate(${(h.windDeg + 180) % 360}deg)`,
+                      transform: `rotate(${windToDeg(h.windDeg)}deg)`,
                     }}
                   />
                   <span className="text-[10px] text-muted-foreground/60 tabular-nums">

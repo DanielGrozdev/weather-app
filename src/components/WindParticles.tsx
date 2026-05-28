@@ -1,26 +1,27 @@
 import { useEffect, useRef } from "react";
 import { useMap } from "react-map-gl/maplibre";
-import { useQuery } from "@tanstack/react-query";
-import { WIND_QUERY_KEY, fetchWindData, sampleGrid, type WindGrid } from "../lib/windGrid";
+import { sampleGrid, type WindGrid } from "../lib/windGrid";
+import { useWindGrid } from "../hooks/useWindGrid";
+import type { Coords } from "@/types";
 
-const NUM_PARTICLES = 5000;
-const BASE_AGE      = 180;   // base frames before a particle resets
-const FADE_ALPHA    = 0.90;  // per-frame alpha multiplier — higher = longer ghost trail
+const NUM_PARTICLES = 1000;
+const BASE_AGE = 300; // base frames before a particle resets
+const FADE_ALPHA = 0.78; // per-frame alpha multiplier — higher = longer ghost trail
 
 // ─── Velocity-keyed colour ramp ──────────────────────────────────────────────
 // Faster particles are brighter / closer to white-cyan; slower particles sit
 // closer to the legend's dim violet base.
 const COLOR_STOPS = [
-  { max: 1.5,      rgb: "120, 95, 170" },   // dim violet
-  { max: 4,        rgb: "160, 145, 215" },  // soft lavender
-  { max: 8,        rgb: "180, 200, 235" },  // pale periwinkle
-  { max: 13,       rgb: "200, 230, 250" },  // light cyan
-  { max: 19,       rgb: "220, 245, 255" },  // bright cyan
-  { max: Infinity, rgb: "245, 255, 255" },  // near-white
+  { max: 1.5, rgb: "200, 230, 250" },
+  { max: 4, rgb: "200, 230, 250" },
+  { max: 8, rgb: "200, 230, 250" },
+  { max: 13, rgb: "200, 230, 250" },
+  { max: 19, rgb: "200, 230, 250" },
+  { max: Infinity, rgb: "200, 230, 250" },
 ];
 
 // Ease-in / ease-out: peak in mid-life, fade to 0 at both ends.
-const ALPHA_TIERS = [0.05, 0.12, 0.20, 0.32];
+const ALPHA_TIERS = [0.05, 0.1, 0.15, 0.2, 0.25, 0.3];
 
 // Tapered width: thin at tail and head, thicker mid-life.
 const WIDTH_TIERS = [0.7, 1.5, 2.4];
@@ -46,7 +47,7 @@ function alphaIdx(curve: number): number {
 
 function widthIdx(curve: number): number {
   if (curve < 0.33) return 0;
-  if (curve < 0.7)  return 1;
+  if (curve < 0.7) return 1;
   return 2;
 }
 
@@ -59,26 +60,26 @@ function geoSpeedFactor(zoom: number): number {
 }
 
 type State = {
-  lat:   Float32Array;
-  lon:   Float32Array;
-  age:   Float32Array;
-  ttl:   Float32Array;
+  lat: Float32Array;
+  lon: Float32Array;
+  age: Float32Array;
+  ttl: Float32Array;
   prevX: Float32Array;
   prevY: Float32Array;
-  grid:  WindGrid | null;
-  raf:   number;
+  grid: WindGrid | null;
+  raf: number;
 };
 
-export function WindParticlesLayer({ enabled }: { enabled?: boolean }) {
+export function WindParticlesLayer({
+  enabled,
+}: {
+  enabled?: boolean;
+  coords: Coords;
+}) {
   const { current: mapRef } = useMap();
   const stateRef = useRef<State | null>(null);
 
-  const { data: grid } = useQuery({
-    queryKey: WIND_QUERY_KEY,
-    queryFn:  fetchWindData,
-    staleTime: 6 * 60 * 60 * 1000,
-    enabled: !!enabled,
-  });
+  const grid = useWindGrid(!!enabled);
 
   // Keep the grid ref up to date without re-running the main effect
   useEffect(() => {
@@ -88,7 +89,7 @@ export function WindParticlesLayer({ enabled }: { enabled?: boolean }) {
   useEffect(() => {
     if (!enabled || !mapRef || !grid) return;
 
-    const map       = mapRef.getMap();
+    const map = mapRef.getMap();
     const container = mapRef.getContainer();
 
     // ── Canvas overlay ────────────────────────────────────────────────────────
@@ -97,19 +98,19 @@ export function WindParticlesLayer({ enabled }: { enabled?: boolean }) {
       "position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;";
     const anchor = container.querySelector(".maplibregl-canvas-container");
     if (anchor?.nextSibling) container.insertBefore(canvas, anchor.nextSibling);
-    else                     container.appendChild(canvas);
+    else container.appendChild(canvas);
 
     // ── Particle state ────────────────────────────────────────────────────────
     const n = NUM_PARTICLES;
     const state: State = {
-      lat:   new Float32Array(n),
-      lon:   new Float32Array(n),
-      age:   new Float32Array(n),
-      ttl:   new Float32Array(n),
+      lat: new Float32Array(n),
+      lon: new Float32Array(n),
+      age: new Float32Array(n),
+      ttl: new Float32Array(n),
       prevX: new Float32Array(n).fill(-1),
       prevY: new Float32Array(n).fill(-1),
-      grid:  grid,
-      raf:   0,
+      grid: grid,
+      raf: 0,
     };
     stateRef.current = state;
 
@@ -117,32 +118,32 @@ export function WindParticlesLayer({ enabled }: { enabled?: boolean }) {
     const STRATA = Math.max(2, Math.ceil(Math.sqrt(n)));
 
     const getPaddedBounds = () => {
-      const b   = map.getBounds();
+      const b = map.getBounds();
       const pad = 10;
       return {
-        west:  b.getWest()  - pad,
-        east:  b.getEast()  + pad,
+        west: b.getWest() - pad,
+        east: b.getEast() + pad,
         south: Math.max(-85, b.getSouth() - pad),
-        north: Math.min(85,  b.getNorth() + pad),
+        north: Math.min(85, b.getNorth() + pad),
       };
     };
 
     const resetParticle = (i: number) => {
-      const b      = getPaddedBounds();
-      const cellW  = (b.east  - b.west)  / STRATA;
-      const cellH  = (b.north - b.south) / STRATA;
-      const cx     = Math.floor(Math.random() * STRATA);
-      const cy     = Math.floor(Math.random() * STRATA);
-      state.lon[i]   = b.west  + (cx + Math.random()) * cellW;
-      state.lat[i]   = b.south + (cy + Math.random()) * cellH;
-      state.ttl[i]   = BASE_AGE * (0.75 + Math.random() * 0.5); // ±25% variety
-      state.age[i]   = Math.floor(Math.random() * state.ttl[i]);
+      const b = getPaddedBounds();
+      const cellW = (b.east - b.west) / STRATA;
+      const cellH = (b.north - b.south) / STRATA;
+      const cx = Math.floor(Math.random() * STRATA);
+      const cy = Math.floor(Math.random() * STRATA);
+      state.lon[i] = b.west + (cx + Math.random()) * cellW;
+      state.lat[i] = b.south + (cy + Math.random()) * cellH;
+      state.ttl[i] = BASE_AGE * (0.75 + Math.random() * 0.5); // ±25% variety
+      state.age[i] = Math.floor(Math.random() * state.ttl[i]);
       state.prevX[i] = -1;
       state.prevY[i] = -1;
     };
 
     const resize = () => {
-      canvas.width  = container.clientWidth;
+      canvas.width = container.clientWidth;
       canvas.height = container.clientHeight;
       state.prevX.fill(-1);
       state.prevY.fill(-1);
@@ -151,16 +152,16 @@ export function WindParticlesLayer({ enabled }: { enabled?: boolean }) {
     resize();
     // Initial stratified placement: one particle per cell, lay it out evenly.
     {
-      const b     = getPaddedBounds();
-      const cellW = (b.east  - b.west)  / STRATA;
+      const b = getPaddedBounds();
+      const cellW = (b.east - b.west) / STRATA;
       const cellH = (b.north - b.south) / STRATA;
       for (let i = 0; i < n; i++) {
         const cx = i % STRATA;
         const cy = Math.floor(i / STRATA) % STRATA;
-        state.lon[i]   = b.west  + (cx + Math.random()) * cellW;
-        state.lat[i]   = b.south + (cy + Math.random()) * cellH;
-        state.ttl[i]   = BASE_AGE * (0.75 + Math.random() * 0.5);
-        state.age[i]   = Math.floor(Math.random() * state.ttl[i]);
+        state.lon[i] = b.west + (cx + Math.random()) * cellW;
+        state.lat[i] = b.south + (cy + Math.random()) * cellH;
+        state.ttl[i] = BASE_AGE * (0.75 + Math.random() * 0.5);
+        state.age[i] = Math.floor(Math.random() * state.ttl[i]);
         state.prevX[i] = -1;
         state.prevY[i] = -1;
       }
@@ -177,17 +178,17 @@ export function WindParticlesLayer({ enabled }: { enabled?: boolean }) {
     const frame = (ts: number) => {
       state.raf = requestAnimationFrame(frame);
 
-      const dt  = lastTs === 0 ? 1 : Math.min(3, (ts - lastTs) / 16.67);
-      lastTs    = ts;
+      const dt = lastTs === 0 ? 1 : Math.min(3, (ts - lastTs) / 16.67);
+      lastTs = ts;
 
-      const g   = state.grid;
+      const g = state.grid;
       const ctx = canvas.getContext("2d");
       if (!ctx || !g) return;
 
-      const W    = canvas.width;
-      const H    = canvas.height;
+      const W = canvas.width;
+      const H = canvas.height;
       const zoom = map.getZoom();
-      const sf   = geoSpeedFactor(zoom) * dt;
+      const sf = geoSpeedFactor(zoom) * dt;
 
       // Motion-blur ghosting: scale existing pixel alpha by FADE_ALPHA each
       // frame so prior segments persist briefly and trail off smoothly.
@@ -206,21 +207,23 @@ export function WindParticlesLayer({ enabled }: { enabled?: boolean }) {
 
         // Bilinear sample from the shared wind grid.
         const { u, v } = sampleGrid(g, lat, lon);
-        const speed    = Math.hypot(u, v);
+        const speed = Math.hypot(u, v);
 
         // Advance in geographic space (cos-corrected longitude).
-        const cosLat = Math.max(0.05, Math.cos(lat * Math.PI / 180));
+        const cosLat = Math.max(0.05, Math.cos((lat * Math.PI) / 180));
         const newLat = lat + v * sf;
         const newLon = lon + (u / cosLat) * sf;
 
         state.age[i] += dt;
-        const t     = state.age[i] / state.ttl[i];
+        const t = state.age[i] / state.ttl[i];
         const curve = lifeCurve(t);
 
         const pt = map.project([newLon, newLat]);
-        const px = pt.x, py = pt.y;
+        const px = pt.x,
+          py = pt.y;
 
-        const offScreen = px < -100 || px > W + 100 || py < -100 || py > H + 100;
+        const offScreen =
+          px < -100 || px > W + 100 || py < -100 || py > H + 100;
         if (t >= 1 || offScreen || newLat < -85 || newLat > 85) {
           resetParticle(i);
           continue;
@@ -228,13 +231,14 @@ export function WindParticlesLayer({ enabled }: { enabled?: boolean }) {
 
         const prevX = state.prevX[i];
         const prevY = state.prevY[i];
-        state.lat[i]   = newLat;
-        state.lon[i]   = newLon;
+        state.lat[i] = newLat;
+        state.lon[i] = newLon;
         state.prevX[i] = px;
         state.prevY[i] = py;
 
         if (prevX >= 0 && prevY >= 0) {
-          const dx = px - prevX, dy = py - prevY;
+          const dx = px - prevX,
+            dy = py - prevY;
           // Skip teleport jumps (antimeridian wrap, etc).
           if (dx * dx + dy * dy < 40000) {
             const ci = speedIdx(speed);
@@ -254,11 +258,11 @@ export function WindParticlesLayer({ enabled }: { enabled?: boolean }) {
         const wi = key % N_W;
         const ai = Math.floor(key / N_W) % N_A;
         const ci = Math.floor(key / (N_W * N_A));
-        ctx.lineWidth   = WIDTH_TIERS[wi];
+        ctx.lineWidth = WIDTH_TIERS[wi];
         ctx.strokeStyle = `rgba(${COLOR_STOPS[ci].rgb}, ${ALPHA_TIERS[ai]})`;
         ctx.beginPath();
         for (let s = 0; s < segs.length; s += 4) {
-          ctx.moveTo(segs[s],     segs[s + 1]);
+          ctx.moveTo(segs[s], segs[s + 1]);
           ctx.lineTo(segs[s + 2], segs[s + 3]);
         }
         ctx.stroke();
@@ -270,17 +274,22 @@ export function WindParticlesLayer({ enabled }: { enabled?: boolean }) {
     // On pan/zoom end, re-distribute particles that drifted off-screen using
     // the same stratified scheme so the field stays evenly populated.
     const onMoveEnd = () => {
-      const b     = getPaddedBounds();
-      const cellW = (b.east  - b.west)  / STRATA;
+      const b = getPaddedBounds();
+      const cellW = (b.east - b.west) / STRATA;
       const cellH = (b.north - b.south) / STRATA;
       for (let i = 0; i < n; i++) {
         const pt = map.project([state.lon[i], state.lat[i]]);
-        if (pt.x < -200 || pt.x > canvas.width + 200 || pt.y < -200 || pt.y > canvas.height + 200) {
+        if (
+          pt.x < -200 ||
+          pt.x > canvas.width + 200 ||
+          pt.y < -200 ||
+          pt.y > canvas.height + 200
+        ) {
           const cx = Math.floor(Math.random() * STRATA);
           const cy = Math.floor(Math.random() * STRATA);
-          state.lon[i]   = b.west  + (cx + Math.random()) * cellW;
-          state.lat[i]   = b.south + (cy + Math.random()) * cellH;
-          state.age[i]   = 0;
+          state.lon[i] = b.west + (cx + Math.random()) * cellW;
+          state.lat[i] = b.south + (cy + Math.random()) * cellH;
+          state.age[i] = 0;
           state.prevX[i] = -1;
           state.prevY[i] = -1;
         }

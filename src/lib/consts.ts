@@ -53,14 +53,16 @@ export const legendConfigMap: Record<MapLayerType, LegendConfig> = {
 
 export type MarkerColors = { bg: string; glow: string };
 
-/** Minimal shape that both current + hourly data satisfy. */
+/** Shape shared by current + hourly slices of the OWM One Call payload. */
 export type DisplayData = {
   temp: number;
+  feels_like: number;
   wind_speed: number;
   wind_deg: number;
   pressure: number;
   humidity: number;
   clouds: number;
+  weather: { id: number; main: string; description: string; icon: string }[];
   pop?: number;
   rain?: { "1h": number };
   snow?: { "1h": number };

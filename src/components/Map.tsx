@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Map, {
   Source,
   Layer,
-  Marker,
   type MapMouseEvent,
   type MapRef,
   type MapSourceDataEvent,
@@ -10,18 +9,16 @@ import Map, {
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { Coords, CityResult, MapLayerType } from "../types";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { getWeather, reverseGeocode } from "../api";
-import { useUnits } from "../hooks/useUnits";
-import { useWindAtPoint } from "../hooks/useWindAtPoint";
-import { LAYER_CONFIG } from "../lib/consts";
+import { CityMarker } from "./CityMarker";
 import { WindParticlesLayer } from "./WindParticles";
 import { WindPoiLayer } from "./WindPoiLayer";
 
 // ── MapLibre bootstrap (runs once when this chunk is first imported) ──────────
 const logicalCores =
   typeof navigator !== "undefined" ? navigator.hardwareConcurrency || 2 : 2;
-maplibregl.setWorkerCount(Math.min(Math.max(Math.floor(logicalCores / 2), 2), 6));
+maplibregl.setWorkerCount(
+  Math.min(Math.max(Math.floor(logicalCores / 2), 2), 6),
+);
 maplibregl.setMaxParallelImageRequests(32);
 maplibregl.prewarm();
 
@@ -210,12 +207,12 @@ export default function WeatherMap({
     const map = mapRef.current?.getMap();
     const nearby = map ? isNearby(map, coords.lat, coords.lon) : true;
 
-    const doFly = () => {
+    const doFly = ({ duration }) => {
       if (flightGenRef.current !== gen) return;
       const currentZoom = mapRef.current?.getZoom() ?? 5;
       mapRef.current?.flyTo({
         center: [coords.lon, coords.lat],
-        duration: 4000,
+        duration: duration,
         zoom: Math.max(currentZoom, 5), // never zoom the user out
         essential: true,
       });
@@ -223,14 +220,14 @@ export default function WeatherMap({
     };
 
     if (nearby) {
-      // Destination tiles are already in view or cache — fly straight away, no fade.
-      doFly();
+      // Destination tiles are already in view or cache — fly straight away, no fade. Faster transition
+      doFly({ duration: 2000 });
     } else {
-      // Destination is far: dim the layer so blank tiles during travel are invisible.
+      // Destination is far: dim the layer so blank tiles during travel are invisible. Slower transition
       const active = activeSlotRef.current;
       if (active === "A") setSlotA((s) => ({ ...s, opacity: 0 }));
       else setSlotB((s) => ({ ...s, opacity: 0 }));
-      doFly();
+      doFly({ duration: 4000 });
     }
   }, [coords]);
 
@@ -317,7 +314,7 @@ export default function WeatherMap({
         </Source>
       )}
 
-      <CustomMarker
+      <CityMarker
         coords={coords}
         mapType={mapType}
         selectedCity={selectedCity}
@@ -328,157 +325,5 @@ export default function WeatherMap({
 
       <WindParticlesLayer enabled={windParticlesEnabled} coords={coords} />
     </Map>
-  );
-}
-
-// ─── Marker ───────────────────────────────────────────────────────────────────
-
-function CustomMarker({
-  coords,
-  mapType,
-  selectedCity,
-  selectedTime,
-}: {
-  coords: Coords;
-  mapType: MapLayerType;
-  selectedCity: CityResult | null;
-  selectedTime: number;
-}) {
-  const { units } = useUnits();
-  const omWind = useWindAtPoint(coords, units);
-
-  const { data: pinnedCity } = useQuery({
-    queryKey: ["reverseGeocode", coords.lat, coords.lon],
-    queryFn: () => reverseGeocode(coords.lat, coords.lon),
-    enabled: selectedCity === null,
-    staleTime: Infinity,
-    placeholderData: keepPreviousData,
-  });
-
-  const { data } = useQuery({
-    queryKey: ["weather", coords.lat, coords.lon, units],
-    queryFn: () => getWeather({ lat: coords.lat, lon: coords.lon, units }),
-    placeholderData: keepPreviousData,
-  });
-
-  const cfg = LAYER_CONFIG[mapType];
-
-  // When a forecast time is selected, find the closest hourly entry so the
-  // marker value and colour match what the tile layer is showing.
-  const display = useMemo(() => {
-    if (!data) return null;
-    if (!selectedTime || !data.hourly.length) return data.current;
-    return data.hourly.reduce((best, h) =>
-      Math.abs(h.dt - selectedTime) < Math.abs(best.dt - selectedTime)
-        ? h
-        : best,
-    );
-  }, [data, selectedTime]);
-
-  const value = display ? cfg.getValue(display, units) : "–";
-  const colors = display
-    ? cfg.getColors(display, units)
-    : { bg: "#6b7280", glow: "rgba(0,0,0,0.3)" };
-
-  const locationLabel = useMemo(() => {
-    if (selectedCity) return `${selectedCity.name}, ${selectedCity.country}`;
-    if (pinnedCity) return `${pinnedCity.name}, ${pinnedCity.country}`;
-    return "";
-  }, [selectedCity, pinnedCity]);
-
-  return (
-    <Marker
-      longitude={coords.lon}
-      latitude={coords.lat}
-      anchor="bottom"
-      pitchAlignment="map"
-      rotationAlignment="map"
-    >
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          filter: `drop-shadow(0 4px 14px ${colors.glow})`,
-          pointerEvents: "none",
-          width: "120px",
-        }}
-      >
-        <div
-          style={{
-            width: "100px",
-            background: colors.bg,
-            color: "#E8E8E8",
-            padding: "5px 0",
-            borderRadius: "10px",
-            border: "1.5px solid rgba(255,255,255,0.22)",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            fontSize: "13px",
-            fontWeight: 700,
-          }}
-        >
-          {locationLabel && (
-            <span
-              style={{
-                fontSize: "11px",
-                opacity: 0.85,
-                marginBottom: "2px",
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                maxWidth: "90px",
-              }}
-            >
-              {locationLabel}
-            </span>
-          )}
-          <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="white"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              dangerouslySetInnerHTML={{ __html: cfg.iconPaths }}
-            />
-            <span>{value}</span>
-            {mapType === "wind_new" && display && (
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 12 12"
-                style={{
-                  transform: `rotate(${(((selectedTime === 0 ? omWind?.wind_deg : null) ?? display.wind_deg) + 180) % 360}deg)`,
-                  flexShrink: 0,
-                }}
-              >
-                <path
-                  d="M6 1 L6 10 M3.5 3.5 L6 1 L8.5 3.5"
-                  stroke="rgba(255,255,255,0.9)"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  fill="none"
-                />
-              </svg>
-            )}
-          </div>
-        </div>
-
-        <svg
-          width="16"
-          height="11"
-          viewBox="0 0 16 11"
-          style={{ marginTop: "-1px" }}
-        >
-          <polygon points="8,11 0,0 16,0" fill={colors.bg} />
-        </svg>
-      </div>
-    </Marker>
   );
 }

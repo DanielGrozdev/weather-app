@@ -1,146 +1,67 @@
-# CLAUDE.md
+# Breezy
 
-## App Overview
+## Goal
 
-Interactive weather map application built with:
-
-- React / Next.js
-- TypeScript
-- MapLibre GL
-- Weather raster tile layers
-- Realtime weather overlays
-- Time slider + animated weather data
-
-Primary UX goal:
-
-- Smooth, seamless map interaction similar to Windy/Breezy
-- No visible empty tiles during drag/zoom
-- Fast overlay updates
-- Minimal CPU/GPU/network usage
+Wind/weather map UI (MapLibre). Priority = smooth rendering > everything else.
 
 ---
 
-# Engineering Priorities
+## Core Rules
 
-Priority order:
+### Map
 
-1. Smooth map rendering
-2. Eliminate tile flickering/loading gaps
-3. Reduce rerenders
-4. Minimize network requests
-5. Keep code simple
-6. Preserve mobile performance
-
-Avoid:
-
-- Large refactors
-- New heavy dependencies
-- Complex abstractions
-- Recreating map sources/layers unnecessarily
-
----
-
-# MapLibre Rules
-
-## Rendering
-
-- Keep previous raster tiles visible until new ones load
+- Never recreate map sources/layers unless required
 - Never clear weather layers during updates
-- Avoid visible flashes/flickers
-- Prefer incremental updates over full source replacement
-- Use lightweight transitions only
+- Prefer mutation over React re-render
+- Preserve previous tiles until new load completes
+- Avoid flicker / blank tiles at all costs
 
-## Performance
+### Performance
 
-- Memoize expensive computations
-- Avoid React state updates during map movement
-- Throttle/debounce move handlers
-- Use requestAnimationFrame for visual updates
-- Avoid unnecessary layer/source recreation
-- Prefer direct map instance mutations where possible
+- No state updates during map movement
+- Throttle/debounce all pointer/move events
+- Use memo + refs for derived map state
+- Avoid unnecessary React renders
+- Prefer requestAnimationFrame for visual sync
 
-## Tile Loading
+### Network
 
-Focus heavily on:
-
-- raster-fade-duration
-- tile cache behavior
-- preloading neighboring tiles
-- minimizing blank tiles during pan
-- preserving already-loaded tiles
-- reducing duplicate tile requests
-
-Prefer:
-
-- persistent raster sources
-- stable tile URLs
-- minimal source invalidation
+- Minimize tile refetching
+- Reuse sources whenever possible
+- Avoid URL churn / source replacement
+- Cache-first behavior always
 
 ---
 
-# UI Guidelines
+## UI
 
-UI style:
-
-- Glassmorphism
-- Minimal
-- Dark weather-map aesthetic
-- Smooth animations only when cheap
-
-Avoid:
-
-- Heavy shadows
-- Expensive blur effects on large areas
-- Excessive animations
-- Layout thrashing
+- Minimal dark glass UI
+- Cheap animations only
+- No heavy blur/shadows over large areas
 
 ---
 
-# Time Slider
+## Time Slider
 
-- Time slider must feel instant
-- Avoid full weather layer reloads if possible
-- Reuse existing source/layer structures
-- Minimize tile refreshes during scrubbing
-
----
-
-# Code Style
-
-- TypeScript strict mode
-- Functional React components
-- Keep files readable
-- Prefer small targeted diffs
-- Avoid premature abstractions
-
-When editing:
-
-- Explain root cause briefly
-- Implement smallest effective fix
-- Preserve existing behavior
-- Mention tradeoffs shortly
+- Must feel instant
+- No full layer reload on scrub
+- Prefer index-based control over time arrays
+- Avoid time-derived state loops
 
 ---
 
-# Output Expectations
+## Code Style
 
-For code suggestions:
-
-- Show only relevant snippets/diffs
-- Keep explanations concise
-- Optimize for production UX
-- Focus on real-world rendering performance
+- Small diffs only
+- No large refactors
+- Keep logic local to component
+- Prefer refs over state for fast-changing values
 
 ---
 
-# Important Files
+## Anti-patterns
 
-High-impact files:
-
-- /src/components/Map.tsx
-- weather layer utilities
-- tile source configuration
-- time slider logic
-- animation/frame update logic
-
-Changes in these files must prioritize rendering smoothness and tile stability.
+- rebuilding map sources per render
+- storing derived time arrays in state
+- syncing state inside effects without guards
+- unthrottled map event handlers

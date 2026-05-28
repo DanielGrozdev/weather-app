@@ -1,7 +1,6 @@
 import { Clock, LoaderCircle, MapPin, Search, X } from "lucide-react";
 import {
   useCallback,
-  useEffect,
   useId,
   useMemo,
   useRef,
@@ -11,6 +10,7 @@ import {
 // (clamp activeIndex in render rather than syncing via useEffect)
 import { cityKey, type CityResult } from "../../types";
 import { useCitySearch } from "../../hooks/useCitySearch";
+import { useClickOutside } from "../../hooks/useClickOutside";
 import { useRecentCities } from "../../hooks/useRecentCities";
 import { HighlightMatch } from "./HighlightMatch";
 import { useTranslation } from "react-i18next";
@@ -68,18 +68,7 @@ export default function CitySearch({
   const activeIndex =
     activeIndexRaw >= 0 && activeIndexRaw < items.length ? activeIndexRaw : -1;
 
-  // Click-outside closes the dropdown without committing.
-  useEffect(() => {
-    if (!isActive) return;
-    function onMouseDown(e: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        setActive(false);
-        setQuery("");
-      }
-    }
-    document.addEventListener("mousedown", onMouseDown);
-    return () => document.removeEventListener("mousedown", onMouseDown);
-  }, [isActive]);
+  useClickOutside(rootRef, useCallback(() => { setActive(false); setQuery(""); }, []), isActive);
 
   const commitSelection = useCallback(
     (city: CityResult) => {

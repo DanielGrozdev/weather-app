@@ -1,6 +1,7 @@
 import { Settings } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useClickOutside } from "../../hooks/useClickOutside";
 import { useUnits } from "../../hooks/useUnits";
 
 const LANGS = ["en", "bg", "fr"] as const;
@@ -11,16 +12,7 @@ export default function SettingsButton() {
   const { i18n, t } = useTranslation();
   const { units, toggle: toggleUnits } = useUnits();
 
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
+  useClickOutside(ref, useCallback(() => setOpen(false), []), open);
 
   return (
     <div ref={ref} className="relative">

@@ -229,6 +229,10 @@ export function uvToWind(
   return { wind_speed, wind_deg };
 }
 
+// Meteorological FROM-direction (0 = wind from north) → TO-direction used by
+// arrow SVGs throughout the UI.
+export const windToDeg = (fromDeg: number) => (fromDeg + 180) % 360;
+
 // ─── Shared fetcher ───────────────────────────────────────────────────────────
 // Single source of truth used by particles, POI markers and point-lookup hook,
 // so every consumer samples the same grid and shows the same speed/direction.

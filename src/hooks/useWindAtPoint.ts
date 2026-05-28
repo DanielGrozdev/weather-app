@@ -1,6 +1,6 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { WIND_QUERY_KEY, fetchWindData, sampleGrid, uvToWind } from '../lib/windGrid';
+import { sampleGrid, uvToWind } from '../lib/windGrid';
 import type { Units } from '../context/UnitsContext';
+import { useWindGrid } from './useWindGrid';
 
 type Coords = { lat: number; lon: number };
 
@@ -9,14 +9,7 @@ export function useWindAtPoint(
   units: Units,
   enabled = true,
 ): { wind_speed: number; wind_deg: number } | null {
-  const { data: grid } = useQuery({
-    queryKey:  WIND_QUERY_KEY,
-    queryFn:   fetchWindData,
-    staleTime: 6 * 60 * 60 * 1000,
-    gcTime:    Infinity,
-    enabled:   !!coords && enabled,
-    placeholderData: keepPreviousData,
-  });
+  const grid = useWindGrid(!!coords && enabled);
 
   if (!grid || !coords) return null;
 

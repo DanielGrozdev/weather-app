@@ -7,16 +7,19 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "fetch-wind": "node scripts/fetch_wind_data.js",
+    "fetch-wind:force": "node scripts/fetch_wind_data.js --force",
+    "fetch-wind:ecmwf": "node scripts/fetch_wind_data.js --model ecmwf",
+    "fetch-wind:all": "node scripts/fetch_wind_data.js --all",
+    "fetch-wind:sample": "node scripts/fetch_wind_data.js --sample --all"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
-    "@gsap/react": "^2.1.2",
+    "@openmeteo/weather-map-layer": "^0.0.19",
     "@tailwindcss/vite": "^4.2.2",
     "@tanstack/react-query": "^5.99.0",
-    "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "gsap": "^3.15.0",
     "i18next": "^26.0.10",
     "lucide-react": "^1.14.0",
     "maplibre-gl": "^5.24.0",
